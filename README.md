@@ -1,19 +1,25 @@
-调用方接口：
+*欢迎使用本SDK*
 
-    def send_message(target, message):
-        """
-        :param target: dict
-        :param message: user msg.
-        :return: message response result.
-        """
-        pass
+*模块安装方式*
+
+    pip install shata-messageclinet -i http://pypi.shatacloud.com/ci/dev --trusted-host pypi.shatacloud.com
     
-服务方接口：
+*模块使用指南*
 
-    def start_listen_message(url, queue, callback):
-        """
-        :param url: dict, parameter info to connect rabbitmq.
-        :param queue: the queue name you will listening.
-        :param callback: your message handler.
-        :return: None
-        pass
+
+### 发送消息
+
+    import messageclient
+    
+    transport = messageclient.get_transport(conf)
+    target = messageclient.Target(**kwargs)
+    messageclient.send_message(transport, target, message)
+    
+
+### 接收处理消息
+    
+    import messageclient
+    
+    transport = messageclient.get_transport(conf)
+    target = messageclient.Target(**kwargs)
+    messageclient.start_consume_message(transport, target, callback)
