@@ -31,6 +31,6 @@ setup(
     name=name,
     version=version,
     url="http://www.shatacloud.com/",
-    packages=["messageclient", "rabbitmq_driver"],
+    packages=["messageclient", "messageclient.rabbitmq_driver"],
     scripts=[]
 )
