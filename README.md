@@ -2,7 +2,7 @@
 
 *模块安装方式*
 
-    pip install shata-messageclinet -i http://pypi.shatacloud.com/ci/dev --trusted-host pypi.shatacloud.com
+    pip install shata-messageclient -i http://pypi.shatacloud.com/ci/dev --trusted-host pypi.shatacloud.com
     
 *模块使用指南*
 
