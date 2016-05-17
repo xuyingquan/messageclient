@@ -25,13 +25,15 @@ class Message(object):
     def send_rpc(self):
         self.response = None
         self.correlation_id = str(uuid.uuid4())
-        self.channel.queue_declare(queue=self.target.appname)
+        self.channel.queue_declare(queue=self.target.appname, durable=True)     # queue durable
         result = self.channel.queue_declare(exclusive=True)
         self.callback_queue = result.method.queue
-        self.channel.basic_consume(self.on_send_rpc, no_ack=True, queue=self.callback_queue)
+        self.channel.basic_consume(self.on_send_rpc, queue=self.callback_queue)
 
-        properties = pika.BasicProperties(reply_to=self.callback_queue, correlation_id=self.correlation_id,
-                                          content_type='application/json')
+        properties = pika.BasicProperties(reply_to=self.callback_queue,
+                                          correlation_id=self.correlation_id,
+                                          content_type='application/json',
+                                          delivery_mode=2)          # make message persistent
         self.channel.basic_publish(exchange='',
                                    routing_key=self.target.appname,
                                    properties=properties,

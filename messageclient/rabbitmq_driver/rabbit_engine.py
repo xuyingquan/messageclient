@@ -74,12 +74,14 @@ class PikaEngine(object):
                 LOG.error(traceback.format_exc())
 
 
-def singleton(cls, *args, **kwargs):
+def singleton(cls):
     instances = {}
-    def _singleton():
-        if cls not in instances:
-            instances[cls] = cls(*args, **kwargs)
-        return instances[cls]
+    _instance_lock = threading.RLock()
+    def _singleton(*args, **kwargs):
+        with _instance_lock:
+            if cls not in instances:
+                instances[cls] = cls(*args, **kwargs)
+            return instances[cls]
     return _singleton
 
 

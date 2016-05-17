@@ -9,10 +9,11 @@
 
 """
 transport = messageclient.get_transport(conf)
-target = messageclient.Target(**kwargs)
+target = messageclient.Target(appname='IaasService')
 message = messageclient.Message(transport, target, msg_body)
-messageclient.send_message(message, mode=unicast)
+messageclient.send_message(message, mode='rpc')
 """
+
 import log
 import os
 import sys
@@ -95,7 +96,7 @@ def send_rpc_response(ch, method, props, result):
 
 def start_consume_message(transport, target, callback):
     daemonize()
-    transport.channel.queue_declare(queue=target.appname)
+    transport.channel.queue_declare(queue=target.appname, durable=True)
     transport.channel.basic_qos(prefetch_count=1)
     transport.channel.basic_consume(callback, queue=target.appname)
     LOG.info('waiting rpc request...')
