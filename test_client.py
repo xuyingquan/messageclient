@@ -15,7 +15,7 @@ msg_body = {
     'os': {'type': 'ubuntu', 'version': '14.04'}
 }
 transport = messageclient.get_transport(CONF)
-target = messageclient.Target(queue='appname')
+target = messageclient.Target(queue='IaasService')
 message = messageclient.Message(transport, target, msg_body)
 result = messageclient.send_message(message, mode='rpc')
 print result

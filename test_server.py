@@ -27,6 +27,6 @@ def on_message(message):
 
 
 transport = messageclient.get_transport(CONF)
-target = messageclient.Target(queue='appname', broadcast=False)  # receive broadcast notification.
+target = messageclient.Target(queue='IaasService', broadcast=False)  # receive broadcast notification.
 messageclient.start_consume_message(transport, target, on_message)
 LOG.info('hello world')

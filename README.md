@@ -12,7 +12,7 @@
     import messageclient
     
     transport = messageclient.get_transport(conf)
-    target = messageclient.Target(appname='IaasServic')
+    target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(transport, target, msg_body)
     messageclient.send_message(message, mode='rpc')
     
@@ -22,7 +22,7 @@
     import messageclient
     
     transport = messageclient.get_transport(conf)
-    target = messageclient.Target(appname='IaasService')
+    target = messageclient.Target(queue='IaasService')
     messageclient.start_consume_message(transport, target, callback)
     
 
@@ -45,7 +45,7 @@
         'os': {'type': 'ubuntu', 'version': '14.04'}
     }
     transport = messageclient.get_transport(CONF)
-    target = messageclient.Target(appname='iaas', topic='')
+    target = messageclient.Target(queue='iaas')
     message = messageclient.Message(transport, target, msg_body)
     result = messageclient.send_message(message, mode='rpc')
     print result
@@ -64,13 +64,12 @@
         virtual_host = '/'
         heartbeat_interval = 2
     
-    
-    def on_message(ch, method, props, body):
-        info = json.loads(body)
+    @messageclient.on_message    
+    def on_message(message):
         print 'receive message: ', info
         result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
-        messageclient.send_rpc_response(ch, method, props, result)
-    
+        return result
+
     transport = messageclient.get_transport(CONF)
-    target = messageclient.Target(appname='iaas', topic='')
+    target = messageclient.Target(queue='iaas')
     messageclient.start_consume_message(transport, target, on_message)
