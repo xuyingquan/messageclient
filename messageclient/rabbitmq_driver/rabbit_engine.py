@@ -23,15 +23,18 @@ class PikaEngine(object):
     def __init__(self, conf, default_exchange=None):
         self.conf = conf
         self._common_pika_params = {
-            'virtual_host': conf.virtual_host,
+            'virtual_host': '/',
         }
-        self._heartbeat_interval = self.conf.heartbeat_interval
+        if self.conf.mq_heartbeat_interval:
+            self._heartbeat_interval = self.conf.mq_heartbeat_interval
+        else:
+            self._heartbeat_interval = 2
         self._connection_lock = threading.RLock()
         self._connection_host_status = {}
 
-        if not conf.hosts:
+        if not conf.mq_hosts:
             raise ValueError("You should provide at least one RabbitMQ host")
-        self._host_list = conf.hosts.split(',')
+        self._host_list = conf.mq_hosts.split(',')
         self._cur_connection_host_num = random.randint(0, len(self._host_list) - 1)
 
     def create_connection(self, for_listening=False):
@@ -57,8 +60,8 @@ class PikaEngine(object):
             host = self._host_list[host_index]
             connection_params = pika.ConnectionParameters(
                 host=host,
-                port=self.conf.port,
-                credentials=pika.credentials.PlainCredentials(self.conf.username, self.conf.password),
+                port=self.conf.mq_port,
+                credentials=pika.credentials.PlainCredentials(self.conf.mq_username, self.conf.mq_password),
                 heartbeat_interval=self._heartbeat_interval if for_listening else None,
                 **self._common_pika_params
             )
@@ -68,7 +71,7 @@ class PikaEngine(object):
                 else:
                     connection = pika.BlockingConnection(parameters=connection_params)
                     connection.params = connection_params
-                    LOG.info('connected rabbitmq-server %s:%s' % (host, self.conf.port))
+                    LOG.info('connected rabbitmq-server %s:%s' % (host, self.conf.mq_port))
                 return connection
             except:
                 LOG.error(traceback.format_exc())

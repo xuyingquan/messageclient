@@ -1,12 +1,12 @@
 import messageclient
 
 class CONF:
-    hosts = '172.30.40.246'
-    port = 5672
-    username = 'guest'
-    password = 'guest'
-    virtual_host = '/'
-    heartbeat_interval = 2
+    mq_hosts = '172.30.40.246'
+    mq_port = 5672
+    mq_username = 'guest'
+    mq_password = 'guest'
+    mq_virtual_host = '/'
+    mq_heartbeat_interval = 2
 
 msg_body = {
     'cpu': 2,
