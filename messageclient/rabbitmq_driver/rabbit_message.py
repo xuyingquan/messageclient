@@ -25,7 +25,7 @@ class Message(object):
     def send_rpc(self):
         self.response = None
         self.correlation_id = str(uuid.uuid4())
-        self.channel.queue_declare(queue=self.target.appname, durable=True)     # queue durable
+        self.channel.queue_declare(queue=self.target.queue, durable=True)     # queue durable
         result = self.channel.queue_declare(exclusive=True)
         self.callback_queue = result.method.queue
         self.channel.basic_consume(self.on_send_rpc, queue=self.callback_queue)
@@ -35,7 +35,7 @@ class Message(object):
                                           content_type='application/json',
                                           delivery_mode=2)          # make message persistent
         self.channel.basic_publish(exchange='',
-                                   routing_key=self.target.appname,
+                                   routing_key=self.target.queue,
                                    properties=properties,
                                    body=json.dumps(self.body))
         while self.response is None:
@@ -45,5 +45,12 @@ class Message(object):
     def on_send_rpc(self, ch, method, props, body):
         if self.correlation_id == props.correlation_id:
             self.response = body
+
+    def notify(self):
+        self.channel.basic_publish(exchange='amq.fanout',
+                                   routing_key='',
+                                   properties=None,
+                                   body=json.dumps(self.body))
+        return None
 
 

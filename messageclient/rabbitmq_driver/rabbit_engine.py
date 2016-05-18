@@ -109,24 +109,25 @@ class Target(object):
     A Target encapsulates all the information to identify where a message
     should be sent or what messages a server is listening for.
     """
-    def __init__(self, appname=None, topic=None, broadcast=False):
+    def __init__(self, exchange=None, topic=None, queue=None, broadcast=False):
         """
-        :param appname: str, app name where you will send message.
-        :param topic: str, queue name.
-        :param broadcast: whether broadcast messages or not.
+        :param exchange: str, exchange name.
+        :param topic: str, exchange type, topic, direct, fanout.
+        :param queue: the target queue name.
         """
-        self.appname = appname
+        self.exchange = exchange
         self.topic = topic
+        self.queue = queue
         self.broadcast = broadcast
 
     def __call__(self, **kwargs):
-        for a in ('appname', 'topic', 'broadcast'):
+        for a in ('exchange', 'topic', 'queue'):
             kwargs.setdefault(a, getattr(self, a))
         return Target(**kwargs)
 
     def __repr__(self):
         attrs = []
-        for a in ('appname', 'topic', 'broadcast'):
+        for a in ('exchange', 'topic', 'queue'):
             v = getattr(self, a)
             if v:
                 attrs.append((a, v))

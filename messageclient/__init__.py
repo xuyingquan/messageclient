@@ -36,6 +36,7 @@ __all__ = [
     "send_rpc_response",
     "start_consume_message",
     "get_transport",
+    "on_message",
 ]
 
 
@@ -82,6 +83,32 @@ def daemonize(home_dir='.', umask=022, stdin=os.devnull, stdout=os.devnull, stde
 def send_message(message, mode='rpc'):
     if mode == 'rpc':
         return message.send_rpc()
+    elif mode == 'notify':
+        return message.notify()
+    else:
+        return None
+
+
+def on_message(handle_message):
+    def _decorator(ch, method, props, body):
+        try:
+            info = json.loads(body)
+            result = handle_message(info)
+            send_rpc_response(ch, method, props, result)
+        except:
+            LOG.error(traceback.format_exc())
+    return _decorator
+
+
+def on_message_broadcast(handle_message):
+    def _decorator(ch, method, props, body):
+        try:
+            info = json.loads(body)
+            handle_message(info)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except:
+            LOG.error(traceback.format_exc())
+    return _decorator
 
 
 def send_rpc_response(ch, method, props, result):
@@ -95,15 +122,19 @@ def send_rpc_response(ch, method, props, result):
 
 
 def start_consume_message(transport, target, callback):
-    daemonize()
-    transport.channel.queue_declare(queue=target.appname, durable=True)
+    # daemonize()
+    transport.channel.queue_declare(queue=target.queue, durable=True)
+    if target.broadcast:
+        transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
     transport.channel.basic_qos(prefetch_count=1)
-    transport.channel.basic_consume(callback, queue=target.appname)
+    transport.channel.basic_consume(callback, queue=target.queue)
     LOG.info('waiting rpc request...')
     try:
         transport.channel.start_consuming()
     except:
         LOG.error(traceback.format_exc())
+        transport.channel.stop_consuming()
+    transport.connection.close()
 
 
 
