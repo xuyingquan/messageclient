@@ -9,10 +9,19 @@ class CONF:
     mq_heartbeat_interval = 2
 
 msg_body = {
-    'cpu': 2,
-    'mem': 4096,
-    'disk': 40,
-    'os': {'type': 'ubuntu', 'version': '14.04'}
+    'action': 'acquire',
+    'name': 'test',
+    'flavor': {
+        'cpu': 2,
+        'mem': 4096,
+        'disk': 40
+    },
+    'image': {
+        'os_type': 'ubuntu',
+        'os_version': '14.04',
+        'os_arch': 'x86_64'
+    },
+    'network': ['ext-net', 'int-net']
 }
 transport = messageclient.get_transport(CONF)
 target = messageclient.Target(queue='IaasService')

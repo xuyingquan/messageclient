@@ -1,13 +1,16 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 #########################################################################
-# File Name: log.py
+# File Name: util.py
 # Author: xuyingquan
 # mail: yingquan.xu@shatacloud
 # Created Time: Mon May  9 15:54:13 CST 2016
 #########################################################################
 
 import logging
+import sys
+import os
+import ConfigParser
 
 
 def init_logger(appname, path):
@@ -26,6 +29,12 @@ def init_logger(appname, path):
     log_file.setFormatter(formatter)
     log.addHandler(log_file)
     return log
+
+
+def load_config(path):
+    conf = ConfigParser.ConfigParser()
+    conf.read(path)
+
 
 
 if __name__ == '__main__':

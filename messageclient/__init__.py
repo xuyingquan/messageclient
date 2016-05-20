@@ -14,13 +14,13 @@ message = messageclient.Message(transport, target, msg_body)
 messageclient.send_message(message, mode='rpc')
 """
 
-import log
+import util
 import os
 import sys
 import pika
 import json
 import traceback
-LOG = log.init_logger('messageclient', '/var/log/messageclient.log')
+LOG = util.init_logger('messageclient', '/var/log/messageclient.log')
 
 from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Transport
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
