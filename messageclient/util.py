@@ -8,9 +8,8 @@
 #########################################################################
 
 import logging
-import sys
-import os
 import ConfigParser
+import os
 
 
 def init_logger(appname, path):
@@ -19,6 +18,14 @@ def init_logger(appname, path):
     :param logname: str, 日志名称
     :param path: str, 日志路径
     """
+    if not os.path.exists(path):
+        path = path.strip()
+        dirname = os.path.dirname(path)
+        basename = os.path.basename(path)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
+        os.chdir(dirname)
+        os.mknod(basename)
     log = logging.getLogger(appname)  # 创建日志
     log.setLevel(logging.DEBUG)
 
@@ -34,9 +41,9 @@ def init_logger(appname, path):
 def load_config(path):
     conf = ConfigParser.ConfigParser()
     conf.read(path)
-
+    return conf
 
 
 if __name__ == '__main__':
-    log = init_logger('test', '/var/log/test.log')
+    log = init_logger('test', '/var/log/iaas.log')
     log.info('hello world')
