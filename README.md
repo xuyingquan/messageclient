@@ -53,6 +53,7 @@
         'network': ['ext-net', 'int-net']
     }
 
+    @messageclient.on_response
     def on_response(message):
     """
     handle result returned by send_request method.
@@ -64,7 +65,7 @@
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(transport, target, msg_body)
     messageclient.send_request(message)
-    messagecient.receive_response(on_response)
+    messagecient.receive_response(on_response)      # non-blocking call, return immediately
 
     # ... main thread handle
 
