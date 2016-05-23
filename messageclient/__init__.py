@@ -20,12 +20,16 @@ import sys
 import pika
 import json
 import traceback
+import threading
 LOG = util.init_logger('messageclient', '/var/log/messageclient.log')
 
 from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Transport
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
 from messageclient.rabbitmq_driver.rabbit_message import Message
 
+
+event = threading.Event()           # use for protect global variable g_result
+g_result = None
 
 __all__ = [
     "Target",
@@ -37,6 +41,9 @@ __all__ = [
     "start_consume_message",
     "get_transport",
     "on_message",
+    "send_request",
+    "receive_response",
+    "on_response",
 ]
 
 
@@ -135,6 +142,29 @@ def start_consume_message(transport, target, callback):
         LOG.error(traceback.format_exc())
         transport.channel.stop_consuming()
     transport.connection.close()
+
+
+def send_message_async(message):
+    global g_result
+    event.clear()
+    g_result = send_message(message, mode='rpc')
+    # print 'g_result: %s ' % g_result
+    event.set()     # notify receiver
+
+
+def send_request(message):
+    threading.Thread(target=send_message_async, args=(message,)).start()
+
+
+def on_response(handle_request):
+    def _decorator():
+        event.wait()    # wait g_result to be ready.
+        handle_request(g_result)
+    return _decorator
+
+
+def receive_response(callback):
+    threading.Thread(target=callback).start()
 
 
 

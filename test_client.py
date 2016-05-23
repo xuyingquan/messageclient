@@ -23,8 +23,15 @@ msg_body = {
     },
     'network': ['ext-net', 'int-net']
 }
+
+
+@messageclient.on_response
+def on_response(message):
+    print 'receive message: %s' % message
+
 transport = messageclient.get_transport(CONF)
 target = messageclient.Target(queue='IaasService')
 message = messageclient.Message(transport, target, msg_body)
-result = messageclient.send_message(message, mode='rpc')
-print result
+messageclient.send_request(message)
+messageclient.receive_response(on_response)
+print 'hello world'
