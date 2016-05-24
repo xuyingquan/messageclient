@@ -51,6 +51,8 @@
             'os_arch': 'x86_64'
         },
         'network': ['ext-net', 'int-net']
+        'key_name': 'dev',
+        'tenant_name': 'dev'
     }
 
     @messageclient.on_response

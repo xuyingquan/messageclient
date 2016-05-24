@@ -136,4 +136,3 @@ class Target(object):
                 attrs.append((a, v))
         values = ', '.join(['%s=%s' % i for i in attrs])
         return '<Target ' + values + '>'
-

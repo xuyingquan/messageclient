@@ -40,6 +40,7 @@ class Message(object):
                                    body=json.dumps(self.body))
         while self.response is None:
             self.transport.connection.process_data_events()
+        self.transport.connection.close()
         return self.response
 
     def on_send_rpc(self, ch, method, props, body):

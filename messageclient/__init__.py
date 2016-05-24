@@ -128,7 +128,7 @@ def send_rpc_response(ch, method, props, result):
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
-def start_consume_message(transport, target, callback):
+def consume_message(transport, target, callback):
     # daemonize()
     transport.channel.queue_declare(queue=target.queue, durable=True)
     if target.broadcast:
@@ -144,6 +144,17 @@ def start_consume_message(transport, target, callback):
     transport.connection.close()
 
 
+def start_consume_message(transport, target, callback):
+    """
+    listening quque to handle message.
+    :param transport: Transport object for connection.
+    :param target: Target object.
+    :param callback: handle message.
+    :return: None
+    """
+    threading.Thread(target=consume_message, args=(transport, target, callback)).start()
+
+
 def send_message_async(message):
     global g_result
     event.clear()
@@ -153,6 +164,11 @@ def send_message_async(message):
 
 
 def send_request(message):
+    """
+    send asynchronous message
+    :param message: Message object
+    :return: None
+    """
     threading.Thread(target=send_message_async, args=(message,)).start()
 
 
@@ -164,7 +180,9 @@ def on_response(handle_request):
 
 
 def receive_response(callback):
+    """
+    receive asynchronous message
+    :param callback: use for handling message received asynchronously
+    :return:
+    """
     threading.Thread(target=callback).start()
-
-
-

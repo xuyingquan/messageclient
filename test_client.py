@@ -1,4 +1,5 @@
 import messageclient
+import time
 
 class CONF:
     mq_hosts = '172.30.40.246'
@@ -21,7 +22,9 @@ msg_body = {
         'os_version': '14.04',
         'os_arch': 'x86_64'
     },
-    'network': ['ext-net', 'int-net']
+    'network': ['ext-net', 'int-net'],
+    'key_name': 'dev',
+    'tenant_name': 'dev'
 }
 
 
@@ -34,4 +37,6 @@ target = messageclient.Target(queue='IaasService')
 message = messageclient.Message(transport, target, msg_body)
 messageclient.send_request(message)
 messageclient.receive_response(on_response)
-print 'hello world'
+while True:
+    print 'execute main thead task.'
+    time.sleep(10)
