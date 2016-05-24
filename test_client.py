@@ -24,7 +24,7 @@ msg_body = {
     },
     'network': ['ext-net', 'int-net'],
     'key_name': 'dev',
-    'tenant_name': 'dev'
+    'tenant_name': 'admin'
 }
 
 
@@ -32,11 +32,17 @@ msg_body = {
 def on_response(message):
     print 'receive message: %s' % message
 
-transport = messageclient.get_transport(CONF)
-target = messageclient.Target(queue='IaasService')
-message = messageclient.Message(transport, target, msg_body)
-messageclient.send_request(message)
-messageclient.receive_response(on_response)
-while True:
-    print 'execute main thead task.'
-    time.sleep(10)
+
+def main():
+    transport = messageclient.get_transport(CONF)
+    target = messageclient.Target(queue='IaasService')
+    message = messageclient.Message(transport, target, msg_body)
+    messageclient.send_request(message)
+    messageclient.receive_response(on_response)
+    while True:
+        print 'execute main thead task.'
+        time.sleep(10)
+
+
+if __name__ == '__main__':
+    main()

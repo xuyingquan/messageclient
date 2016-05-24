@@ -46,6 +46,7 @@ class Message(object):
     def on_send_rpc(self, ch, method, props, body):
         if self.correlation_id == props.correlation_id:
             self.response = json.loads(body)
+        ch.basic_ack(delivery_tag=method.delivery_tag)
 
     def notify(self):
         self.channel.basic_publish(exchange='amq.fanout',
