@@ -95,6 +95,9 @@ class Transport(object):
         self.connection = self._driver.create_connection()
         self.channel = self.connection.channel()
 
+    def __del__(self):
+        self.connection.close()
+
 
 def get_transport(conf):
     """
