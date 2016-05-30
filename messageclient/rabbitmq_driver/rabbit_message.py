@@ -55,4 +55,14 @@ class Message(object):
                                    body=json.dumps(self.body))
         return None
 
+    def send_request(self):
+        self.channel.queue_declare(queue=self.target.queue, durable=True)  # queue durable
+        properties = pika.BasicProperties(reply_to=self.callback_queue,
+                                          correlation_id=self.correlation_id,
+                                          content_type='application/json',
+                                          delivery_mode=2)  # make message persistent
 
+        self.channel.basic_publish(exchange='',
+                                   routing_key=self.target.queue,
+                                   properties=properties,
+                                   body=json.dumps(self.body))

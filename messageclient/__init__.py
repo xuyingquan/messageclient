@@ -154,13 +154,14 @@ def start_consume_message(transport, target, callback):
     """
     threading.Thread(target=consume_message, args=(transport, target, callback)).start()
 
-
+"""
 def send_message_async(message):
     global g_result
     event.clear()
     g_result = send_message(message, mode='rpc')
     # print 'g_result: %s ' % g_result
     event.set()     # notify receiver
+"""
 
 
 def send_request(message):
@@ -169,20 +170,42 @@ def send_request(message):
     :param message: Message object
     :return: None
     """
-    threading.Thread(target=send_message_async, args=(message,)).start()
+    message.send_request()
 
 
 def on_response(handle_request):
-    def _decorator():
-        event.wait()    # wait g_result to be ready.
-        handle_request(g_result)
+    def _decorator(ch, method, props, body):
+        try:
+            info = json.loads(body)
+            handle_request(info)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except:
+            LOG.error(traceback.format_exc())
+
     return _decorator
 
 
-def receive_response(callback):
+def receive_response_async(transport, target, callback):
     """
     receive asynchronous message
     :param callback: use for handling message received asynchronously
     :return:
     """
-    threading.Thread(target=callback).start()
+    callback_queue = '%s-callback' % target.queue
+    transport.channel.queue_declare(queue=callback_queue, durable=True)
+    if target.broadcast:
+        transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
+    transport.channel.basic_qos(prefetch_count=1)
+    transport.channel.basic_consume(callback, queue=callback_queue)
+    LOG.info('waiting callback response...')
+    try:
+        transport.channel.start_consuming()
+    except:
+        LOG.error(traceback.format_exc())
+        transport.channel.stop_consuming()
+    transport.connection.close()
+
+
+def receive_response(transport, target, callback):
+    threading.Thread(target=receive_response_async, args=(transport, target, callback)).start()
+

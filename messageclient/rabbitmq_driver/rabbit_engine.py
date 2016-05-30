@@ -78,13 +78,12 @@ class PikaEngine(object):
 
 
 def singleton(cls):
-    instances = {}
     _instance_lock = threading.RLock()
     def _singleton(*args, **kwargs):
         with _instance_lock:
-            if cls not in instances:
-                instances[cls] = cls(*args, **kwargs)
-            return instances[cls]
+            if not hasattr(cls, '_instance'):
+                cls._instance = cls(*args, **kwargs)
+            return cls._instance
     return _singleton
 
 
