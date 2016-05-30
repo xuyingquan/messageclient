@@ -67,7 +67,7 @@
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(transport, target, msg_body)
     messageclient.send_request(message)
-    messagecient.receive_response(on_response)      # non-blocking call, return immediately
+    messagecient.receive_response(transport, target, on_response)      # non-blocking call, return immediately
 
     # ... main thread handle
 

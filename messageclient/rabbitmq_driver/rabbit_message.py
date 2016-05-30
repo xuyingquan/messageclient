@@ -57,8 +57,11 @@ class Message(object):
 
     def send_request(self):
         self.channel.queue_declare(queue=self.target.queue, durable=True)  # queue durable
-        properties = pika.BasicProperties(reply_to=self.callback_queue,
-                                          correlation_id=self.correlation_id,
+        callback_queue = '%s-callback' % self.target.queue
+        self.channel.queue_declare(queue=callback_queue, durable=True)
+        correlation_id = str(uuid.uuid4())
+        properties = pika.BasicProperties(reply_to=callback_queue,
+                                          correlation_id=correlation_id,
                                           content_type='application/json',
                                           delivery_mode=2)  # make message persistent
 
