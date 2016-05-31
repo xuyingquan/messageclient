@@ -95,6 +95,7 @@ class Transport(object):
         self.channel = self.connection.channel()
 
     def __del__(self):
+        self.channel.close()
         self.connection.close()
 
 
