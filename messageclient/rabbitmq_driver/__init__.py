@@ -27,6 +27,7 @@ class Consumer(threading.Thread):
         self._channel = None
         self._closing = False
         self._consumer_tag = None
+        self.start()
 
     def connect(self):
         """This method connects to RabbitMQ, returning the connection handle.
@@ -337,6 +338,7 @@ class Publisher(threading.Thread):
         self._message_number = 0
         self._stopping = False
         self._closing = False
+        self.start()
 
     def connect(self):
         LOG.info('Connecting to %s' % self.conf.mq_hosts)
@@ -351,7 +353,7 @@ class Publisher(threading.Thread):
                                      on_close_callback=None,
                                      stop_ioloop_on_close=False)
 
-    def on_connection_open(self):
+    def on_connection_open(self, connection):
         LOG.info('Connection opened')
         self.add_on_connection_close_callback()
         self.open_channel()
@@ -500,4 +502,3 @@ if __name__ == '__main__':
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
     consumer = Consumer(conf, 'queue-xyq', 'exchange-xyq', routing_key='exchange-queue-xyq')
-    consumer.start()
