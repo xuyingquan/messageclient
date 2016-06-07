@@ -7,6 +7,65 @@
 *模块使用指南*
 
 
+*非阻塞方式*
+
+### 服务端实现
+    from messageclient import Consumer
+    from oslo_config import cfg
+
+    conf = cfg.CONF
+    rabbit_opts = [
+        cfg.StrOpt('mq_hosts', default='172.30.40.246'),
+        cfg.PortOpt('mq_port', default=5672),
+        cfg.StrOpt('mq_username', default='guest'),
+        cfg.StrOpt('mq_password', default='guest'),
+        cfg.StrOpt('mq_virtual_host', default='/'),
+        cfg.IntOpt('mq_heartbeat_interval', default=2)
+    ]
+
+    conf.register_opts(rabbit_opts)
+    conf(project='iaas')  # load config file /etc/iaas/iaas.conf
+
+    class IaasServiceConsumer(Consumer):
+        def __init__(self, conf, queue, exchange):
+            super(IaasServiceConsumer, self).__init__(conf, queue, exchange)
+        
+        def handle_message(self, message):
+            print 'Receive Message: %s' % message
+
+    if __name__ == '__main__':
+        consumer = IaasServiceConsumer(conf, 'queue-iaas', 'exchange-iaas')
+
+### 客户端实现
+    from messageclient import Publisher
+    from oslo_config import cfg
+
+    conf = cfg.CONF
+    rabbit_opts = [
+        cfg.StrOpt('mq_hosts', default='172.30.40.246'),
+        cfg.PortOpt('mq_port', default=5672),
+        cfg.StrOpt('mq_username', default='guest'),
+        cfg.StrOpt('mq_password', default='guest'),
+        cfg.StrOpt('mq_virtual_host', default='/'),
+        cfg.IntOpt('mq_heartbeat_interval', default=2)
+    ]
+
+    conf.register_opts(rabbit_opts)
+    conf(project='iaas')  # load config file /etc/iaas/iaas.conf
+        
+    if __name__ == '__main__':
+        try:
+            publisher = Publisher(conf, 'queue-iaas', 'exchange-iaas')
+            publisher.publish_message({'hello': 'world'})
+        except KeyboardInterrupt:
+            publisher.stop()
+            
+            
+            
+            
+
+*阻塞方式调用*
+
 ### 发送消息
 
     import messageclient
@@ -118,3 +177,7 @@
     transport = messageclient.get_transport(CONF)
     target = messageclient.Target(queue='iaas')
     messageclient.start_consume_message(transport, target, on_message)
+    
+
+
+
