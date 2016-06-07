@@ -460,14 +460,15 @@ class Publisher(threading.Thread):
         LOG.info('Published %i messages, %i have yet to be confirmed, %i were acked and %i were nacked'
                  % (self._message_number, len(self._deliveries), self._acked, self._nacked))
 
-    def publish_message(self, message):
+    def publish_message(self, message, routing_key=None):
+        routing_key = self.routing_key if routing_key is None else routing_key
         if self._stopping:
             return
         while not self._channel:
             time.sleep(1)
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
         self._channel.basic_publish(self.exchange,
-                                    self.routing_key,
+                                    routing_key,
                                     json.dumps(message, ensure_ascii=False),
                                     properties)
         self._message_number += 1
