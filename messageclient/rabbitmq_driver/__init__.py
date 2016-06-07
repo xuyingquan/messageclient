@@ -16,16 +16,6 @@ import time
 LOGGER = LOG
 
 
-def handle_message():
-    def _decorator(self, unused_channel, basic_deliver, properties, body):
-        info = json.loads(body)
-        self.on_message(info)
-        LOGGER.info('Received message # %s from %s: %s' % (basic_deliver.delivery_tag, properties.app_id, body))
-        self.acknowledge_message(basic_deliver.delivery_tag)
-
-    return _decorator
-
-
 class Consumer(threading.Thread):
     def __init__(self, conf, queue, exchange=None, exchange_type='topic', routing_key=None):
         super(Consumer, self).__init__()
@@ -246,8 +236,12 @@ class Consumer(threading.Thread):
         if self._channel:
             self._channel.close()
 
-    @handle_message
-    def on_message(self, message):
+    def on_message(self, unused_channel, basic_deliver, properties, body):
+        message = json.loads(body)
+        self.handle_message(message)
+        self.acknowledge_message(delivery_tag=basic_deliver.delivery_tag)
+
+    def handle_message(self, message):
         print 'receive message: %s' % message
 
     def acknowledge_message(self, delivery_tag):
