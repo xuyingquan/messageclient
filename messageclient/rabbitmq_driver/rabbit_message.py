@@ -69,3 +69,5 @@ class Message(object):
                                    routing_key=self.target.queue,
                                    properties=properties,
                                    body=json.dumps(self.body))
+
+
