@@ -11,18 +11,29 @@ import pika
 from messageclient import LOG
 import threading
 import json
+import time
 
 LOGGER = LOG
 
 
+def handle_message():
+    def _decorator(self, unused_channel, basic_deliver, properties, body):
+        info = json.loads(body)
+        self.on_message(info)
+        LOGGER.info('Received message # %s from %s: %s' % (basic_deliver.delivery_tag, properties.app_id, body))
+        self.acknowledge_message(basic_deliver.delivery_tag)
+
+    return _decorator
+
+
 class Consumer(threading.Thread):
-    def __init__(self, conf, queue, exchange='', exchange_type='topic', routing_key=None):
+    def __init__(self, conf, queue, exchange=None, exchange_type='topic', routing_key=None):
         super(Consumer, self).__init__()
         self.conf = conf
-        self.exchange = exchange
+        self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
-        self.routing_key = routing_key
+        self.routing_key = self.queue if routing_key is None else routing_key
         self._connection = None
         self._channel = None
         self._closing = False
@@ -235,22 +246,9 @@ class Consumer(threading.Thread):
         if self._channel:
             self._channel.close()
 
-    def on_message(self, unused_channel, basic_deliver, properties, body):
-        """Invoked by pika when a message is delivered from RabbitMQ. The
-        channel is passed for your convenience. The basic_deliver object that
-        is passed in carries the exchange, routing key, delivery tag and
-        a redelivered flag for the message. The properties passed in is an
-        instance of BasicProperties with the message properties and the body
-        is the message that was sent.
-
-        :param pika.channel.Channel unused_channel: The channel object
-        :param pika.Spec.Basic.Deliver: basic_deliver method
-        :param pika.Spec.BasicProperties: properties
-        :param str|unicode body: The message body
-
-        """
-        LOGGER.info('Received message # %s from %s: %s' % (basic_deliver.delivery_tag, properties.app_id, body))
-        self.acknowledge_message(basic_deliver.delivery_tag)
+    @handle_message
+    def on_message(self, message):
+        print 'receive message: %s' % message
 
     def acknowledge_message(self, delivery_tag):
         """Acknowledge the message delivery from RabbitMQ by sending a
@@ -453,6 +451,8 @@ class Publisher(threading.Thread):
     def publish_message(self, message):
         if self._stopping:
             return
+        while not self._channel:
+            time.sleep(1)
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
         self._channel.basic_publish(self.exchange,
                                     self.routing_key,
