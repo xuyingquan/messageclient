@@ -17,14 +17,14 @@ LOGGER = LOG
 
 
 class Consumer(threading.Thread):
-    def __init__(self, conf, queue, exchange=None, exchange_type='topic', routing_key=None):
+    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
         super(Consumer, self).__init__()
         self.conf = conf
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
-        if routing_key:
-            self.routing_key = routing_key
+        if binding_key:
+            self.routing_key = binding_key
         elif exchange and queue:
             self.routing_key = '%s-%s' % (exchange, queue)
         else:
@@ -324,14 +324,14 @@ class Consumer(threading.Thread):
 
 
 class Publisher(threading.Thread):
-    def __init__(self, conf, queue, exchange=None, exchange_type='topic', routing_key=None):
+    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
         super(Publisher, self).__init__()
         self.conf = conf
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
-        if routing_key:
-            self.routing_key = routing_key
+        if binding_key:
+            self.routing_key = binding_key
         elif exchange and queue:
             self.routing_key = '%s-%s' % (exchange, queue)
         else:
