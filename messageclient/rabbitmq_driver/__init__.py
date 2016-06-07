@@ -23,12 +23,21 @@ class Consumer(threading.Thread):
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
-        self.routing_key = self.queue if routing_key is None else routing_key
+        if routing_key:
+            self.routing_key = routing_key
+        elif exchange and queue:
+            self.routing_key = '%s-%s' % (exchange, queue)
+        else:
+            self.routing_key = queue
         self._connection = None
         self._channel = None
         self._closing = False
         self._consumer_tag = None
         self.start()
+
+    def __del__(self):
+        self.close_channel()
+        self.close_connection()
 
     def connect(self):
         """This method connects to RabbitMQ, returning the connection handle.
@@ -321,7 +330,12 @@ class Publisher(threading.Thread):
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
-        self.routing_key = queue if routing_key is None else routing_key
+        if routing_key:
+            self.routing_key = routing_key
+        elif exchange and queue:
+            self.routing_key = '%s-%s' % (exchange, queue)
+        else:
+            self.routing_key = queue
         self._connection = None
         self._channel = None
         self._deliveries = []
@@ -331,6 +345,10 @@ class Publisher(threading.Thread):
         self._stopping = False
         self._closing = False
         self.start()
+
+    def __del__(self):
+        self.close_channel()
+        self.close_connection()
 
     def connect(self):
         LOG.info('Connecting to %s' % self.conf.mq_hosts)
