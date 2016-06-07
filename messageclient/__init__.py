@@ -26,6 +26,7 @@ LOG = util.init_logger('messageclient', '/var/log/messageclient.log')
 from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Transport
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
 from messageclient.rabbitmq_driver.rabbit_message import Message
+from messageclient.rabbitmq_driver import Consumer, Publisher
 
 
 event = threading.Event()           # use for protect global variable g_result
