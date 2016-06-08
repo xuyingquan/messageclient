@@ -562,7 +562,7 @@ class RpcPublisher(Publisher):
         if self._stopping:
             return
         while not self._channel:
-            time.sleep(1)
+            time.sleep(0.2)
         self.response = None
         self.correlation_id = str(uuid.uuid4())
         properties = pika.BasicProperties(app_id=None,
@@ -581,5 +581,5 @@ class RpcPublisher(Publisher):
     def send_message(self, message):
         self.publish_message(message)
         while self.response is None:
-            time.sleep(1)
+            time.sleep(0.2)
         return self.response
