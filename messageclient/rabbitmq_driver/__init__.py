@@ -522,32 +522,32 @@ class RpcPublisher(Publisher):
         self._consumer_tag = None
         self.response = None
         self.correlation_id = None
-        self.setup_queue(callback_queue)
+        self.setup_queue_rpc(callback_queue)
 
-    def setup_queue(self, queue_name):
+    def setup_queue_rpc(self, queue_name):
         LOG.info('Declaring queue %s' % queue_name)
         while not self._channel:
             time.sleep(1)
-        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
+        self._channel.queue_declare(self.on_queue_declareok_rpc, queue_name, durable=True)
 
-    def on_queue_declareok(self, method_frame):
+    def on_queue_declareok_rpc(self, method_frame):
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.callback_queue, self.callback_queue))
-        self._channel.queue_bind(self.on_bindok, self.callback_queue, self.exchange, self.callback_queue)
+        self._channel.queue_bind(self.on_bindok_rpc, self.callback_queue, self.exchange, self.callback_queue)
 
-    def on_bindok(self, unused_frame):
+    def on_bindok_rpc(self, unused_frame):
         LOG.info('Queue bound')
-        self.start_consuming()
+        self.start_consuming_rpc()
 
-    def start_consuming(self):
+    def start_consuming_rpc(self):
         LOG.info('Issuing consumer related RPC commands')
-        self.add_on_cancel_callback()
+        self.add_on_cancel_callback_rpc()
         self._consumer_tag = self._channel.basic_consume(self.on_message, self.callback_queue)
 
-    def add_on_cancel_callback(self):
+    def add_on_cancel_callback_rpc(self):
         LOG.info('Adding consumer cancellation callback')
-        self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
+        self._channel.add_on_cancel_callback(self.on_consumer_cancelled_rpc)
 
-    def on_consumer_cancelled(self, method_frame):
+    def on_consumer_cancelled_rpc(self, method_frame):
         LOG.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
         if self._channel:
             self._channel.close()
