@@ -254,7 +254,7 @@ class Consumer(threading.Thread):
 
     def handle_message(self, message):
         print 'receive message: %s' % message
-        return {}
+        return message
 
     def acknowledge_message(self, delivery_tag):
         """Acknowledge the message delivery from RabbitMQ by sending a
