@@ -581,5 +581,5 @@ class RpcPublisher(Publisher):
     def send_message(self, message):
         self.publish_message(message)
         while self.response is None:
-            self._connection.process_data_events()
+            time.sleep(1)
         return self.response
