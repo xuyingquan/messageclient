@@ -7,10 +7,10 @@
 *模块使用指南*
 
 
-*非阻塞方式*
+*多客户端rpc调用*
 
 ### 服务端实现
-    from messageclient import Consumer
+    from messageclient import RpcConsumer
     from oslo_config import cfg
 
     conf = cfg.CONF
@@ -26,18 +26,18 @@
     conf.register_opts(rabbit_opts)
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
-    class IaasServiceConsumer(Consumer):
-        def __init__(self, conf, queue, exchange):
-            super(IaasServiceConsumer, self).__init__(conf, queue, exchange)
+    class TestConsumer(RpcConsumer):
+        def __init__(self, conf, queue):
+            super(TestConsumer, self).__init__(conf, queue)
         
         def handle_message(self, message):
             print 'Receive Message: %s' % message
 
     if __name__ == '__main__':
-        consumer = IaasServiceConsumer(conf, 'queue-iaas', 'exchange-iaas')
+        consumer = TestConsumer(conf, 'rpc')
 
 ### 客户端实现
-    from messageclient import Publisher
+    from messageclient import PpcPublisher
     from oslo_config import cfg
 
     conf = cfg.CONF
@@ -54,11 +54,9 @@
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
         
     if __name__ == '__main__':
-        try:
-            publisher = Publisher(conf, 'queue-iaas', 'exchange-iaas')
-            publisher.publish_message({'hello': 'world'})
-        except KeyboardInterrupt:
-            publisher.stop()
+        rpc = RpcPublisher(conf, 'rpc', 'rpc-callback-1')
+        result = rpc.send_message({'hello': 'world'})
+        print result
             
             
             
