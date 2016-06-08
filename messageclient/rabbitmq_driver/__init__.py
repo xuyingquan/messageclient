@@ -502,8 +502,8 @@ class Publisher(threading.Thread):
 
 
 class RpcConsumer(Consumer):
-    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
-        super(RpcConsumer, self).__init__(conf, queue, exchange, exchange_type, binding_key)
+    def __init__(self, conf, queue):
+        super(RpcConsumer, self).__init__(conf, queue)
 
     def on_message(self, channel, method, props, body):
         message = json.loads(body)
@@ -523,6 +523,12 @@ class RpcPublisher(Publisher):
         self.response = None
         self.correlation_id = None
         self.setup_queue(callback_queue)
+
+    def setup_queue(self, queue_name):
+        LOG.info('Declaring queue %s' % queue_name)
+        while not self._channel:
+            time.sleep(1)
+        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
     def on_queue_declareok(self, method_frame):
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.callback_queue, self.callback_queue))
