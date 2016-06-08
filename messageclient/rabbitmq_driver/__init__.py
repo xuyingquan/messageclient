@@ -505,6 +505,10 @@ class RpcConsumer(Consumer):
     def __init__(self, conf, queue):
         super(RpcConsumer, self).__init__(conf, queue)
 
+    def __del__(self):
+        self._channel.queue_delete(queue=self.queue)
+        self._channel.exchange_delete(self.exchange)
+
     def on_message(self, channel, method, props, body):
         message = json.loads(body)
         result = self.handle_message(message)
@@ -523,6 +527,9 @@ class RpcPublisher(Publisher):
         self.response = None
         self.correlation_id = None
         self.setup_queue_rpc(callback_queue)
+
+    def __del__(self):
+        self._channel.queue_delete(queue=self.callback_queue)
 
     def setup_queue_rpc(self, queue_name):
         LOG.info('Declaring queue %s' % queue_name)
