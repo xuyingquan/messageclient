@@ -12,6 +12,7 @@ from messageclient import LOG
 import threading
 import json
 import time
+import uuid
 
 LOGGER = LOG
 
@@ -164,7 +165,8 @@ class Consumer(threading.Thread):
         LOGGER.info('Declaring exchange %s' % exchange_name)
         self._channel.exchange_declare(self.on_exchange_declareok,
                                        exchange_name,
-                                       self.exchange_type)
+                                       self.exchange_type,
+                                       durable=True)
 
     def on_exchange_declareok(self, unused_frame):
         """Invoked by pika when RabbitMQ has finished the Exchange.Declare RPC
@@ -185,7 +187,7 @@ class Consumer(threading.Thread):
 
         """
         LOGGER.info('Declaring queue %s' % queue_name)
-        self._channel.queue_declare(self.on_queue_declareok, queue_name)
+        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
     def on_queue_declareok(self, method_frame):
         """Method invoked by pika when the Queue.Declare RPC call made in
@@ -252,6 +254,7 @@ class Consumer(threading.Thread):
 
     def handle_message(self, message):
         print 'receive message: %s' % message
+        return {}
 
     def acknowledge_message(self, delivery_tag):
         """Acknowledge the message delivery from RabbitMQ by sending a
@@ -410,7 +413,7 @@ class Publisher(threading.Thread):
 
     def setup_exchange(self, exchange_name):
         LOG.info('Declaring exchange %s' % exchange_name)
-        self._channel.exchange_declare(self.on_exchange_declareok, exchange_name, self.exchange_type)
+        self._channel.exchange_declare(self.on_exchange_declareok, exchange_name, self.exchange_type, durable=True)
 
     def on_exchange_declareok(self, unused_frame):
         LOG.info('Exchange declared')
@@ -418,7 +421,7 @@ class Publisher(threading.Thread):
 
     def setup_queue(self, queue_name):
         LOG.info('Declaring queue %s' % queue_name)
-        self._channel.queue_declare(self.on_queue_declareok, queue_name)
+        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
     def on_queue_declareok(self, method_frame):
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
@@ -498,20 +501,79 @@ class Publisher(threading.Thread):
         self._connection.close()
 
 
-if __name__ == '__main__':
-    from oslo_config import cfg
+class RpcConsumer(Consumer):
+    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
+        super(RpcConsumer, self).__init__(conf, queue, exchange, exchange_type, binding_key)
 
-    conf = cfg.CONF
-    rabbit_opts = [
-        cfg.StrOpt('mq_hosts', default='172.30.40.246'),
-        cfg.PortOpt('mq_port', default=5672),
-        cfg.StrOpt('mq_username', default='guest'),
-        cfg.StrOpt('mq_password', default='guest'),
-        cfg.StrOpt('mq_virtual_host', default='/'),
-        cfg.IntOpt('mq_heartbeat_interval', default=2)
-    ]
+    def on_message(self, channel, method, props, body):
+        message = json.loads(body)
+        result = self.handle_message(message)
+        self.acknowledge_message(delivery_tag=method.delivery_tag)
+        channel.basic_publish(exchange=self.exchange,
+                              routing_key=props.reply_to,
+                              properties=pika.BasicProperties(correlation_id=props.correlation_id),
+                              body=json.dumps(result))
 
-    conf.register_opts(rabbit_opts)
-    conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
-    consumer = Consumer(conf, 'queue-xyq', 'exchange-xyq', routing_key='exchange-queue-xyq')
+class RpcPublisher(Publisher):
+    def __init__(self, conf, queue, callback_queue):
+        super(RpcPublisher, self).__init__(conf, queue)
+        self.callback_queue = callback_queue
+        self._consumer_tag = None
+        self.response = None
+        self.correlation_id = None
+        self.setup_queue(callback_queue)
+
+    def on_queue_declareok(self, method_frame):
+        LOG.info('Binding %s to %s with %s' % (self.exchange, self.callback_queue, self.callback_queue))
+        self._channel.queue_bind(self.on_bindok, self.callback_queue, self.exchange, self.callback_queue)
+
+    def on_bindok(self, unused_frame):
+        LOG.info('Queue bound')
+        self.start_consuming()
+
+    def start_consuming(self):
+        LOG.info('Issuing consumer related RPC commands')
+        self.add_on_cancel_callback()
+        self._consumer_tag = self._channel.basic_consume(self.on_message, self.callback_queue)
+
+    def add_on_cancel_callback(self):
+        LOG.info('Adding consumer cancellation callback')
+        self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
+
+    def on_consumer_cancelled(self, method_frame):
+        LOG.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
+        if self._channel:
+            self._channel.close()
+
+    def on_message(self, channel, method, props, body):
+        if props.correlation_id == self.correlation_id:
+            self.response = json.loads(body)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+
+    def publish_message(self, message, routing_key=None):
+        routing_key = self.routing_key if routing_key is None else routing_key
+        if self._stopping:
+            return
+        while not self._channel:
+            time.sleep(1)
+        self.response = None
+        self.correlation_id = str(uuid.uuid4())
+        properties = pika.BasicProperties(app_id=None,
+                                          reply_to=self.callback_queue,
+                                          correlation_id=self.correlation_id,
+                                          content_type='application/json',
+                                          headers=None)
+        self._channel.basic_publish(self.exchange,
+                                    routing_key,
+                                    json.dumps(message, ensure_ascii=False),
+                                    properties)
+        self._message_number += 1
+        self._deliveries.append(self._message_number)
+        LOG.info('Published message # %i' % self._message_number)
+
+    def send_message(self, message):
+        self.publish_message(message)
+        while self.response is None:
+            self._connection.process_data_events()
+        return self.response
