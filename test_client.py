@@ -10,6 +10,9 @@ class CONF:
     mq_heartbeat_interval = 2
 
 msg_body = {
+    'header': {
+        'type': 'test'
+    },
     'action': 'acquire',
     'name': 'test',
     'flavor': {
@@ -37,11 +40,11 @@ def main():
     transport = messageclient.get_transport(CONF)
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(transport, target, msg_body)
-    messageclient.send_request(message)
-    messageclient.receive_response(transport, target, on_response)
-    while True:
-        print 'execute main thead task.'
-        time.sleep(10)
+    print messageclient.send_message(message)
+    # messageclient.receive_response(transport, target, on_response)
+    # while True:
+    #    print 'execute main thead task.'
+    #    time.sleep(10)
 
 
 if __name__ == '__main__':
