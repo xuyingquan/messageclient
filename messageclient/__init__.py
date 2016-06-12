@@ -31,6 +31,7 @@ from messageclient.rabbitmq_driver import Consumer, Publisher, RpcPublisher, Rpc
 
 event = threading.Event()           # use for protect global variable g_result
 g_result = None
+routes = dict()
 
 __all__ = [
     "Target",
@@ -96,7 +97,7 @@ def send_message(message, mode='rpc'):
     else:
         return None
 
-
+"""
 def on_message(handle_message):
     def _decorator(ch, method, props, body):
         try:
@@ -105,6 +106,17 @@ def on_message(handle_message):
             send_rpc_response(ch, method, props, result)
         except:
             LOG.error(traceback.format_exc())
+    return _decorator
+"""
+
+
+def on_message(type=None):
+    def _decorator(handle_message):
+        def __decorator(message):
+            handle_message(message)
+            if type is not None:
+                routes[type] = __decorator
+        return __decorator
     return _decorator
 
 
@@ -145,7 +157,18 @@ def consume_message(transport, target, callback):
     transport.connection.close()
 
 
-def start_consume_message(transport, target, callback):
+def consumer(ch, method, props, body):
+    try:
+        info = json.loads(body)
+        type = info['header']['type']
+        handle_message = routes[type]
+        result = handle_message(info)
+        send_rpc_response(ch, method, props, result)
+    except:
+        LOG.error(traceback.format_exc())
+
+
+def start_consume_message(transport, target):
     """
     listening quque to handle message.
     :param transport: Transport object for connection.
@@ -153,7 +176,7 @@ def start_consume_message(transport, target, callback):
     :param callback: handle message.
     :return: None
     """
-    threading.Thread(target=consume_message, args=(transport, target, callback)).start()
+    threading.Thread(target=consume_message, args=(transport, target, consumer)).start()
 
 """
 def send_message_async(message):

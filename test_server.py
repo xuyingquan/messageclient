@@ -19,7 +19,7 @@ def on_message(ch, method, props, body):
 """
 
 
-@messageclient.on_message
+@messageclient.on_message(type='test')
 def on_message(message):
     print 'receive message: ', message
     result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
@@ -28,5 +28,5 @@ def on_message(message):
 
 transport = messageclient.get_transport(CONF)
 target = messageclient.Target(queue='IaasService', broadcast=False)  # receive broadcast notification.
-messageclient.start_consume_message(transport, target, on_message)
+messageclient.start_consume_message(transport, target)
 LOG.info('hello world')
