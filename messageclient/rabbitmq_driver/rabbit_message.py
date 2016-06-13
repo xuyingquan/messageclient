@@ -25,13 +25,13 @@ class Message(object):
         self.data['body'] = self.body
         self.data['header'] = self.header
         self.response = None
+        self.callback_queue = '%s-callback' % self.target.queue
 
     def send_rpc(self):
         self.response = None
         self.correlation_id = str(uuid.uuid4())
         self.channel.queue_declare(queue=self.target.queue, durable=True)     # queue durable
-        result = self.channel.queue_declare(exclusive=True)
-        self.callback_queue = result.method.queue
+        self.channel.queue_declare(queue=self.callback_queue, durable=True)
         self.channel.basic_consume(self.on_send_rpc, queue=self.callback_queue)
 
         properties = pika.BasicProperties(reply_to=self.callback_queue,
@@ -56,7 +56,7 @@ class Message(object):
         self.channel.basic_publish(exchange='amq.fanout',
                                    routing_key='',
                                    properties=None,
-                                   body=json.dumps(self.body))
+                                   body=json.dumps(self.data))
         return None
 
     def send_request(self):
@@ -72,6 +72,6 @@ class Message(object):
         self.channel.basic_publish(exchange='',
                                    routing_key=self.target.queue,
                                    properties=properties,
-                                   body=json.dumps(self.body))
+                                   body=json.dumps(self.data))
 
 
