@@ -27,6 +27,7 @@ from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Tran
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
 from messageclient.rabbitmq_driver.rabbit_message import Message
 from messageclient.rabbitmq_driver import Consumer, Publisher, RpcPublisher, RpcConsumer
+from messageclient import *
 
 
 event = threading.Event()           # use for protect global variable g_result
@@ -46,6 +47,7 @@ __all__ = [
     "send_request",
     "receive_response",
     "on_response",
+    "routes",
 ]
 
 
@@ -161,8 +163,10 @@ def consume_message(transport, target, callback):
 def consumer(ch, method, props, body):
     try:
         info = json.loads(body)
+        LOG.info('routes: %s' % routes)
         type = info['header']['type']
         handle_message = routes[type]
+
         result = handle_message(info)
         send_rpc_response(ch, method, props, result)
     except:
