@@ -113,6 +113,11 @@ def on_message(handle_message):
 
 
 def on_message(type=None):
+    """
+
+    :param type:
+    :return:
+    """
     def _decorator(handle_message):
         def __decorator(message):
             result = handle_message(message)

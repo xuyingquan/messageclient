@@ -64,23 +64,29 @@
 
 *阻塞方式调用*
 
-### 发送消息
+### 发送消息（客户端）
 
     import messageclient
     
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, msg_body)
-    messageclient.send_message(message, mode='rpc')
+    message = messageclient.Message(transport, target, header={'type': 'test'}, body={})
+    messageclient.send_message(message)
     
 
-### 接收处理消息
+### 接收处理消息（服务端）
     
     import messageclient
     
+    @messageclient.on_message(type='test')
+    def on_message(message):
+        print 'receive message: ', message
+        result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
+        return result
+    
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    messageclient.start_consume_message(transport, target, callback)
+    messageclient.start_consume_message(transport, target)
 
 
 ### 异步消息发送处理
