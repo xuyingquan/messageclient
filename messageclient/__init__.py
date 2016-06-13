@@ -116,10 +116,11 @@ def on_message(type=None):
     def _decorator(handle_message):
         def __decorator(message):
             result = handle_message(message)
-            if type is not None:
-                routes[type] = __decorator
             return result
+        if type is not None:
+            routes[type] = __decorator
         return __decorator
+
     return _decorator
 
 

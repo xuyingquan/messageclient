@@ -26,6 +26,8 @@ def on_message(message):
     return result
 
 
+print 'messageclient.routes: %s' % messageclient.routes
+
 transport = messageclient.get_transport(CONF)
 target = messageclient.Target(queue='IaasService', broadcast=False)  # receive broadcast notification.
 messageclient.start_consume_message(transport, target)
