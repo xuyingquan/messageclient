@@ -127,7 +127,7 @@ def on_message(type=None):
 def on_message_broadcast(handle_message):
     def _decorator(ch, method, props, body):
         try:
-            info = json.loads(body)
+            info = json.loads(body['body'])
             handle_message(info)
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except:
@@ -161,11 +161,12 @@ def consume_message(transport, target, callback):
     transport.connection.close()
 
 
-def consumer(ch, method, props, body):
+def consumer(ch, method, props, data):
     try:
-        info = json.loads(body)
-        LOG.info('routes: %s' % routes)
-        type = info['header']['type']
+        data = json.loads(data)
+        info = data['body']
+        # LOG.info('routes: %s' % routes)
+        type = data['header']['type']
         handle_message = routes[type]
 
         result = handle_message(info)

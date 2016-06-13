@@ -14,12 +14,16 @@ import json
 
 class Message(object):
 
-    def __init__(self, transport, target, msg_body):
+    def __init__(self, transport, target, header={}, body={}):
         self.transport = transport
         self.target = target
         self.channel = self.transport.channel
         self.correlation_id = None
-        self.body = msg_body
+        self.header = header
+        self.body = body
+        self.data = dict()
+        self.data['body'] = self.body
+        self.data['header'] = self.header
         self.response = None
 
     def send_rpc(self):
@@ -37,7 +41,7 @@ class Message(object):
         self.channel.basic_publish(exchange='',
                                    routing_key=self.target.queue,
                                    properties=properties,
-                                   body=json.dumps(self.body))
+                                   body=json.dumps(self.data))
         while self.response is None:
             self.transport.connection.process_data_events()
         # self.transport.connection.close()
