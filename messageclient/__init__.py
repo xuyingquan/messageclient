@@ -112,10 +112,15 @@ def on_message_received(ch, method, props, msg):
         msg = json.loads(msg)
         msg_body = msg['body']                      # 获取消息体数据
         msg_type = msg['header']['type']            # 获取消息的类型
-        _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
 
+        _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
         result = _do_task(msg_body)                 # 处理消息
-        send_rpc_response(ch, method, props, result)    # 返回发送端处理结果
+
+        result_msg = dict()                         # 封装返回结果，添加头部信息
+        result_msg['body'] = result
+        result_msg['header'] = msg['header']
+
+        send_rpc_response(ch, method, props, result_msg)    # 返回发送端处理结果
     except:
         LOG.error(traceback.format_exc())
 
@@ -157,7 +162,7 @@ def start_consume_message(transport, target):
     threading.Thread(target=consume_message, args=(transport, target, on_message_received)).start()
 
 
-def on_request_received(ch, method, props, msg):
+def on_response_received(ch, method, props, msg):
     """ 接受消息响应函数， 此函数由pika调用； 根据消息的类型调用具体的消息响应函数
 
     """
@@ -184,7 +189,7 @@ def consume_callback_message(transport, target):
 
     # 注册消息处理函数
     transport.channel.basic_qos(prefetch_count=1)
-    transport.channel.basic_consume(on_request_received, queue=callback_queue)
+    transport.channel.basic_consume(on_response_received, queue=callback_queue)
     LOG.info('waiting callback response...')
 
     # 接收处理消息

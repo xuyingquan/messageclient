@@ -28,7 +28,7 @@ msg_body = {
 }
 
 
-@messageclient.on_response
+@messageclient.on_message(type='iaas')
 def on_response(message):
     print 'receive message: %s' % message
 
@@ -36,12 +36,12 @@ def on_response(message):
 def main():
     transport = messageclient.get_transport(CONF)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, header={'type': 'test'}, body=msg_body)
-    print messageclient.send_message(message)
-    # messageclient.receive_response(transport, target, on_response)
-    # while True:
-    #    print 'execute main thead task.'
-    #    time.sleep(10)
+    message = messageclient.Message(transport, target, header={'type': 'iaas'}, body=msg_body)
+    messageclient.send_request(message)
+    messageclient.receive_response(transport, target)
+    while True:
+        print 'execute main thead task.'
+        time.sleep(10)
 
 
 if __name__ == '__main__':

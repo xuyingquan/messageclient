@@ -59,7 +59,8 @@ class Message(object):
         """ 处理回调队列消息响应函数
         """
         if self.correlation_id == props.correlation_id:
-            self.response = json.loads(body)
+            result = json.loads(body)
+            self.response = result['body']
 
         # 确认消息
         ch.basic_ack(delivery_tag=method.delivery_tag)
