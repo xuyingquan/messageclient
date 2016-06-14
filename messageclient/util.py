@@ -11,6 +11,7 @@ import logging
 import ConfigParser
 import os
 import sys
+import signal
 
 
 def init_logger(appname, path):
@@ -86,6 +87,26 @@ def daemonize(home_dir='.', umask=022, stdin=os.devnull, stdout=os.devnull, stde
         os.dup2(si.fileno(), sys.stdin.fileno())
         os.dup2(so.fileno(), sys.stdout.fileno())
         os.dup2(se.fileno(), sys.stderr.fileno())
+
+
+def timeout_handler(signum, callback):
+    raise AssertionError
+
+
+def timeout_decorator(fn):
+    def _decorator(message, mode='rpc', timeout=-1):
+        try:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            if timeout == -1:
+                signal.alarm(1000000)
+            else:
+                signal.alarm(timeout)
+        except AssertionError:
+            print 'timeout return'
+        result = fn(message, mode)
+        signal.alarm(0)
+        return result
+    return _decorator
 
 
 if __name__ == '__main__':

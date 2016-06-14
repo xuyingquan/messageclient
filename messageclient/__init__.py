@@ -37,6 +37,7 @@ __all__ = [
 ]
 
 
+@util.timeout_decorator
 def send_message(message, mode='rpc'):
     """ 发送消息
     :param message: 消息对象
