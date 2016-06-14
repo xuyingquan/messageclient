@@ -118,7 +118,9 @@ def on_message_received(ch, method, props, msg):
 
         _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
         result = _do_task(msg_body)                 # 处理消息
-
+        if result is None:
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            return
         result_msg = dict()                         # 封装返回结果，添加头部信息
         result_msg['body'] = result
         result_msg['header'] = msg['header']

@@ -41,7 +41,7 @@ def main():
     # print messageclient.send_message(message)
 
     messageclient.send_request(message)
-    messageclient.receive_response(transport, target)
+    # messageclient.receive_response(transport, target)
 
 
 if __name__ == '__main__':
