@@ -65,7 +65,10 @@ def on_message(type=None):
             result = handle_message(message)
             return result
         if type is not None:
-            message_handler[type] = __decorator
+            if type in message_handler:
+                message_handler['%s-callback' % type] = __decorator
+            else:
+                message_handler[type] = __decorator
         return __decorator
 
     return _decorator
@@ -170,9 +173,13 @@ def on_response_received(ch, method, props, msg):
         msg = json.loads(msg)
         msg_body = msg['body']                      # 获取消息体数据
         msg_type = msg['header']['type']            # 获取消息的类型
-        _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
-        _do_task(msg_body)                          # 处理响应结果
-        ch.basic_ack(delivery_tag=method.delivery_tag)  # 确认收到的消息
+        msg_type_callback = '%s-callback' % msg_type
+        if msg_type_callback in message_handler:
+            _do_task = message_handler[msg_type_callback]        # 获取特定消息类型的处理函数
+        else:
+            _do_task = message_handler[msg_type]
+        _do_task(msg_body)                                       # 处理响应结果
+        ch.basic_ack(delivery_tag=method.delivery_tag)           # 确认收到的消息
     except:
         LOG.error(traceback.format_exc())
 

@@ -10,14 +10,6 @@ class CONF:
     mq_virtual_host = '/'
     mq_heartbeat_interval = 2
 
-"""
-def on_message(ch, method, props, body):
-    info = json.loads(body)
-    print 'receive message: ', info
-    result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
-    messageclient.send_rpc_response(ch, method, props, result)
-"""
-
 
 @messageclient.on_message(type='test')
 def on_message(message):
@@ -25,8 +17,6 @@ def on_message(message):
     result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
     return result
 
-
-print 'messageclient.routes: %s' % messageclient.routes
 
 transport = messageclient.get_transport(CONF)
 target = messageclient.Target(queue='IaasService', broadcast=False)  # receive broadcast notification.
