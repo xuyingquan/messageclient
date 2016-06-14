@@ -74,23 +74,6 @@ def on_message(type=None):
     return _decorator
 
 
-def on_message_broadcast(handle_message):
-    """ 装饰器，装饰广播消息响应函数
-    :param handle_message: 被装饰的函数对象
-    :return: 返回封装后的函数
-
-    """
-    def _decorator(ch, method, props, data):
-        try:
-            data = json.loads(data)
-            info = data['body']
-            handle_message(info)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-        except:
-            LOG.error(traceback.format_exc())
-    return _decorator
-
-
 def send_rpc_response(ch, method, props, result):
     """ 给发送端返回消息响应结果，并对接受到的消息进行确认
 
