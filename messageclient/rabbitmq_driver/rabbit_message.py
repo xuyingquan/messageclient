@@ -76,15 +76,21 @@ class Message(object):
     def send_request(self):
         """ 非阻塞发送消息请求
         """
+
+        # 创建目标队列
         self.channel.queue_declare(queue=self.target.queue, durable=True)  # queue durable
+
+        # 创建回调队列
         callback_queue = '%s-callback' % self.target.queue
         self.channel.queue_declare(queue=callback_queue, durable=True)
+
+        # 设置消息属性
         correlation_id = str(uuid.uuid4())
         properties = pika.BasicProperties(reply_to=callback_queue,
                                           correlation_id=correlation_id,
                                           content_type='application/json',
                                           delivery_mode=2)  # make message persistent
-
+        # 向目标队列发送消息
         self.channel.basic_publish(exchange='',
                                    routing_key=self.target.queue,
                                    properties=properties,

@@ -10,6 +10,7 @@
 import logging
 import ConfigParser
 import os
+import sys
 
 
 def init_logger(appname, path):
@@ -42,6 +43,49 @@ def load_config(path):
     conf = ConfigParser.ConfigParser()
     conf.read(path)
     return conf
+
+
+def daemonize(home_dir='.', umask=022, stdin=os.devnull, stdout=os.devnull, stderr=os.devnull):
+    """ 初始化当前进程为后台daemon进程
+
+    """
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Exit first parent
+            sys.exit(0)
+    except OSError, e:
+        sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
+        sys.exit(1)
+
+    # Decouple from parent environment
+    os.chdir(home_dir)
+    os.setsid()
+    os.umask(umask)
+
+    # Do second fork
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Exit from second parent
+            sys.exit(0)
+    except OSError, e:
+        sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
+        sys.exit(1)
+
+    if sys.platform != 'darwin':  # This block breaks on OS X
+        # Redirect standard file descriptors
+        sys.stdout.flush()
+        sys.stderr.flush()
+        si = file(stdin, 'r')
+        so = file(stdout, 'a+')
+        if stderr:
+            se = file(stderr, 'a+', 0)
+        else:
+            se = so
+        os.dup2(si.fileno(), sys.stdin.fileno())
+        os.dup2(so.fileno(), sys.stdout.fileno())
+        os.dup2(se.fileno(), sys.stderr.fileno())
 
 
 if __name__ == '__main__':

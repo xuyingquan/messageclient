@@ -71,7 +71,7 @@
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(transport, target, header={'type': 'test'}, body={})
-    messageclient.send_message(message)
+    result = messageclient.send_message(message)
     
 
 ### 接收处理消息（服务端）
@@ -89,99 +89,25 @@
     messageclient.start_consume_message(transport, target)
 
 
-### 异步消息发送处理
+### 异步消息发送处理 (客户端)
+
     import messageclient
 
-    class CONF:
-        mq_hosts = '172.30.40.246'
-        mq_port = 5672
-        mq_username = 'guest'
-        mq_password = 'guest'
-        mq_virtual_host = '/'
-        mq_heartbeat_interval = 2
-
-    msg_body = {
-        'action': 'acquire',
-        'name': 'test',
-        'flavor': {
-            'cpu': 2,
-            'mem': 4096,
-            'disk': 40
-        },
-        'image': {
-            'os_type': 'ubuntu',
-            'os_version': '14.04',
-            'os_arch': 'x86_64'
-        },
-        'network': ['ext-net', 'int-net']
-        'key_name': 'dev',
-        'tenant_name': 'dev'
-    }
-
-    @messageclient.on_response
+    @messageclient.on_message(type='test')
     def on_response(message):
-    """
-    handle result returned by send_request method.
-    :param message: dict, user mesage
-    """
+        """ 处理异步返回结果
+        :param message: dict, 用户定义的消息结构
+        
+        """
         print 'receive message: %s' % message
 
-    transport = messageclient.get_transport(CONF)
+    transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, msg_body)
-    messageclient.send_request(message)
-    messagecient.receive_response(transport, target, on_response)      # non-blocking call, return immediately
+    message = messageclient.Message(transport, target, header={'type': 'test'}, body={})
+    messageclient.send_request(message)                     # 或者 messageclient.send_message(message, mode='async')
+    messagecient.receive_response(transport, target)        # non-blocking call, return immediately
 
     # ... main thread handle
-
-### example client
-
-    import messageclient
-
-    class CONF:
-        mq_hosts = '172.30.40.246'
-        mq_port = 5672
-        mq_username = 'guest'
-        mq_password = 'guest'
-        mq_virtual_host = '/'
-        mq_heartbeat_interval = 2
-    
-    msg_body = {
-        'cpu': 2,
-        'mem': 4096,
-        'disk': 40,
-        'os': {'type': 'ubuntu', 'version': '14.04'}
-    }
-    transport = messageclient.get_transport(CONF)
-    target = messageclient.Target(queue='iaas')
-    message = messageclient.Message(transport, target, msg_body)
-    result = messageclient.send_message(message, mode='rpc')
-    print result
-    
-
-### example server
-
-    import messageclient
-    import json
-    
-    class CONF:
-        mq_hosts = '172.30.40.246'
-        mq_port = 5672
-        mq_username = 'guest'
-        mq_password = 'guest'
-        mq_virtual_host = '/'
-        mq_heartbeat_interval = 2
-    
-    @messageclient.on_message    
-    def on_message(message):
-        print 'receive message: ', info
-        result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
-        return result
-
-    transport = messageclient.get_transport(CONF)
-    target = messageclient.Target(queue='iaas')
-    messageclient.start_consume_message(transport, target, on_message)
-    
 
 
 

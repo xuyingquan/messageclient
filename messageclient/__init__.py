@@ -7,16 +7,7 @@
 # Created Time: Sat May  7 10:33:08 CST 2016
 #########################################################################
 
-"""
-transport = messageclient.get_transport(conf)
-target = messageclient.Target(appname='IaasService')
-message = messageclient.Message(transport, target, msg_body)
-messageclient.send_message(message, mode='rpc')
-"""
-
 import util
-import os
-import sys
 import pika
 import json
 import traceback
@@ -27,12 +18,9 @@ from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Tran
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
 from messageclient.rabbitmq_driver.rabbit_message import Message
 from messageclient.rabbitmq_driver import Consumer, Publisher, RpcPublisher, RpcConsumer
-from messageclient import *
 
 
-event = threading.Event()           # use for protect global variable g_result
-g_result = None
-routes = dict()
+message_handler = dict()            # 消息处理函数（用户定义）字典
 
 __all__ = [
     "Target",
@@ -46,93 +34,53 @@ __all__ = [
     "on_message",
     "send_request",
     "receive_response",
-    "on_response",
-    "routes",
 ]
 
 
-def daemonize(home_dir='.', umask=022, stdin=os.devnull, stdout=os.devnull, stderr=os.devnull):
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # Exit first parent
-            sys.exit(0)
-    except OSError, e:
-        sys.stderr.write("fork #1 failed: %d (%s)\n" % (e.errno, e.strerror))
-        sys.exit(1)
-
-    # Decouple from parent environment
-    os.chdir(home_dir)
-    os.setsid()
-    os.umask(umask)
-
-    # Do second fork
-    try:
-        pid = os.fork()
-        if pid > 0:
-            # Exit from second parent
-            sys.exit(0)
-    except OSError, e:
-        sys.stderr.write("fork #2 failed: %d (%s)\n" % (e.errno, e.strerror))
-        sys.exit(1)
-
-    if sys.platform != 'darwin':  # This block breaks on OS X
-        # Redirect standard file descriptors
-        sys.stdout.flush()
-        sys.stderr.flush()
-        si = file(stdin, 'r')
-        so = file(stdout, 'a+')
-        if stderr:
-            se = file(stderr, 'a+', 0)
-        else:
-            se = so
-        os.dup2(si.fileno(), sys.stdin.fileno())
-        os.dup2(so.fileno(), sys.stdout.fileno())
-        os.dup2(se.fileno(), sys.stderr.fileno())
-
-
 def send_message(message, mode='rpc'):
+    """ 发送消息
+    :param message: 消息对象
+    :param mode: 消息发送方式，rpc，单播或者广播
+    :return: 返回消息响应结果
+
+    """
     if mode == 'rpc':
         return message.send_rpc()
     elif mode == 'notify':
         return message.notify()
+    elif mode == 'async':
+        return message.send_request()
     else:
         return None
 
-"""
-def on_message(handle_message):
-    def _decorator(ch, method, props, body):
-        try:
-            info = json.loads(body)
-            result = handle_message(info)
-            send_rpc_response(ch, method, props, result)
-        except:
-            LOG.error(traceback.format_exc())
-    return _decorator
-"""
-
 
 def on_message(type=None):
-    """
+    """ 装饰器，装饰消息响应函数，将装饰的响应函数加入到routes字典，以type为关键字
+    :param type: 消息类型
+    :return: 返回封装后的消息响应函数
 
-    :param type:
-    :return:
     """
     def _decorator(handle_message):
         def __decorator(message):
             result = handle_message(message)
             return result
         if type is not None:
-            routes[type] = __decorator
+            message_handler[type] = __decorator
         return __decorator
 
     return _decorator
 
 
 def on_message_broadcast(handle_message):
-    def _decorator(ch, method, props, body):
+    """ 装饰器，装饰广播消息响应函数
+    :param handle_message: 被装饰的函数对象
+    :return: 返回封装后的函数
+
+    """
+    def _decorator(ch, method, props, data):
         try:
-            info = json.loads(body['body'])
+            data = json.loads(data)
+            info = data['body']
             handle_message(info)
             ch.basic_ack(delivery_tag=method.delivery_tag)
         except:
@@ -141,23 +89,56 @@ def on_message_broadcast(handle_message):
 
 
 def send_rpc_response(ch, method, props, result):
+    """ 给发送端返回消息响应结果，并对接受到的消息进行确认
+
+    """
     message_properties = pika.BasicProperties(correlation_id=props.correlation_id)
     callback_queue = props.reply_to
+
+    # 返回处理结果
     ch.basic_publish(exchange='',
                      routing_key=callback_queue,
                      properties=message_properties,
                      body=json.dumps(result))
+    # 确认消息
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 
+def on_message_received(ch, method, props, msg):
+    """ 接受消息响应函数， 此函数由pika调用； 根据消息的类型调用具体的消息响应函数
+
+    """
+    try:
+        msg = json.loads(msg)
+        msg_body = msg['body']                      # 获取消息体数据
+        msg_type = msg['header']['type']            # 获取消息的类型
+        _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
+
+        result = _do_task(msg_body)                 # 处理消息
+        send_rpc_response(ch, method, props, result)    # 返回发送端处理结果
+    except:
+        LOG.error(traceback.format_exc())
+
+
 def consume_message(transport, target, callback):
+    """ 准备消费消息
+
+    """
     # daemonize()
+
+    # 创建消费队列
     transport.channel.queue_declare(queue=target.queue, durable=True)
     if target.broadcast:
         transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
+
+    # 设置队列预取消息
     transport.channel.basic_qos(prefetch_count=1)
+
+    # 注册消息响应函数
     transport.channel.basic_consume(callback, queue=target.queue)
     LOG.info('waiting rpc request...')
+
+    # 开始消费消息
     try:
         transport.channel.start_consuming()
     except:
@@ -166,74 +147,47 @@ def consume_message(transport, target, callback):
     transport.connection.close()
 
 
-def consumer(ch, method, props, data):
-    try:
-        data = json.loads(data)
-        info = data['body']
-        # LOG.info('routes: %s' % routes)
-        type = data['header']['type']
-        handle_message = routes[type]
+def start_consume_message(transport, target):
+    """ 监听特定队列，处理消息
+    :param transport: 连接传输对象.
+    :param target: 目标对象.
+    :param callback: 处理消息回调函数
 
-        result = handle_message(info)
-        send_rpc_response(ch, method, props, result)
+    """
+    threading.Thread(target=consume_message, args=(transport, target, on_message_received)).start()
+
+
+def on_request_received(ch, method, props, msg):
+    """ 接受消息响应函数， 此函数由pika调用； 根据消息的类型调用具体的消息响应函数
+
+    """
+    try:
+        msg = json.loads(msg)
+        msg_body = msg['body']                      # 获取消息体数据
+        msg_type = msg['header']['type']            # 获取消息的类型
+        _do_task = message_handler[msg_type]        # 获取特定消息类型的处理函数
+        _do_task(msg_body)                          # 处理响应结果
+        ch.basic_ack(delivery_tag=method.delivery_tag)  # 确认收到的消息
     except:
         LOG.error(traceback.format_exc())
 
 
-def start_consume_message(transport, target):
+def consume_callback_message(transport, target):
+    """ 消费回调队列消息
+
     """
-    listening quque to handle message.
-    :param transport: Transport object for connection.
-    :param target: Target object.
-    :param callback: handle message.
-    :return: None
-    """
-    threading.Thread(target=consume_message, args=(transport, target, consumer)).start()
-
-"""
-def send_message_async(message):
-    global g_result
-    event.clear()
-    g_result = send_message(message, mode='rpc')
-    # print 'g_result: %s ' % g_result
-    event.set()     # notify receiver
-"""
-
-
-def send_request(message):
-    """
-    send asynchronous message
-    :param message: Message object
-    :return: None
-    """
-    message.send_request()
-
-
-def on_response(handle_request):
-    def _decorator(ch, method, props, body):
-        try:
-            info = json.loads(body)
-            handle_request(info)
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-        except:
-            LOG.error(traceback.format_exc())
-
-    return _decorator
-
-
-def receive_response_async(transport, target, callback):
-    """
-    receive asynchronous message
-    :param callback: use for handling message received asynchronously
-    :return:
-    """
+    # 创建回调队列
     callback_queue = '%s-callback' % target.queue
     transport.channel.queue_declare(queue=callback_queue, durable=True)
     if target.broadcast:
         transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
+
+    # 注册消息处理函数
     transport.channel.basic_qos(prefetch_count=1)
-    transport.channel.basic_consume(callback, queue=callback_queue)
+    transport.channel.basic_consume(on_request_received, queue=callback_queue)
     LOG.info('waiting callback response...')
+
+    # 接收处理消息
     try:
         transport.channel.start_consuming()
     except:
@@ -242,6 +196,16 @@ def receive_response_async(transport, target, callback):
     transport.connection.close()
 
 
-def receive_response(transport, target, callback):
-    threading.Thread(target=receive_response_async, args=(transport, target, callback)).start()
+def send_request(message):
+    """ 发送异步消息
+    :param message: 消息对象
+
+    """
+    message.send_request()
+
+
+def receive_response(transport, target):
+    """ 接收异步消息返回结果
+    """
+    threading.Thread(target=consume_callback_message, args=(transport, target)).start()
 
