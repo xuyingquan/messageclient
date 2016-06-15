@@ -58,7 +58,7 @@ def send_message(message, mode='rpc'):
 def on_message(type=None):
     """ 装饰器，装饰消息响应函数，将装饰的响应函数加入到routes字典，以type为关键字
     :param type: 消息类型
-    :return: 返回封装后的消息响应函数
+    :return: 返回封装后的消息响应函数 __decorator(message)
 
     """
     def _decorator(handle_message):

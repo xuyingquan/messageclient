@@ -12,6 +12,7 @@ import ConfigParser
 import os
 import sys
 import signal
+import collections
 
 
 def init_logger(appname, path):
@@ -107,6 +108,10 @@ def timeout_decorator(fn):
         signal.alarm(0)
         return result
     return _decorator
+
+
+def is_callable(fn):
+    return isinstance(fn, collections.Callable)
 
 
 if __name__ == '__main__':
