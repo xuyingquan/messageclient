@@ -95,6 +95,9 @@ def timeout_handler(signum, callback):
 
 
 def timeout_decorator(fn):
+    """ 超时装饰器
+
+    """
     def _decorator(message, mode='rpc', timeout=-1):
         try:
             signal.signal(signal.SIGALRM, timeout_handler)
@@ -111,6 +114,9 @@ def timeout_decorator(fn):
 
 
 def is_callable(fn):
+    """ 判断一个函数是否是可调用
+
+    """
     return isinstance(fn, collections.Callable)
 
 

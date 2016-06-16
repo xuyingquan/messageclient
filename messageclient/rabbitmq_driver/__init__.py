@@ -13,39 +13,94 @@ import threading
 import json
 import time
 import uuid
+import sys
+from messageclient import util
 
 LOGGER = LOG
+CALLBACK_MANAGER = dict()           # 消息处理函数集合
+
+
+def on_message_v1(type=None):
+    """ 装饰器，装饰用户定义的消息处理函数，将其加入到CALLBACK_MANAGER中，供on_message调用
+
+    """
+    def _decorator(fn):
+        if not util.is_callable(fn):
+            LOG.error('function %s is not callable' % fn)
+            sys.exit(-1)
+
+        def __decorator(self, message):
+            result = fn(self, message)
+            return result
+
+        # 将被装饰的用户定义的函数注册到
+        if type is not None and not type in CALLBACK_MANAGER:
+            CALLBACK_MANAGER[type] = __decorator
+
+        return __decorator
+    return _decorator
+
+
+class RabbitMessage(object):
+    """ 消息类型
+
+    """
+    count = 0       # 消息计数
+
+    def __init__(self, header={}, body={}):
+        RabbitMessage.count += 1
+        self.id = RabbitMessage.count       # 消息id
+        self.msg = dict()                   # 封装消息数据
+        self.msg['header'] = header
+        self.msg['body'] = body
 
 
 class Consumer(threading.Thread):
+    """ 消息消费者基类
+
+    """
     def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
+        """ 构造函数
+        :param conf: ConfigOpts, 配置文件对象
+        :param queue: str, 连接队列名称
+        :param exchange: str, 交换机名称
+        :param exchange_type: str, 交换机类型
+        :param binding_key: str, 交换机和队列绑定的 binding_key
+
+        """
         super(Consumer, self).__init__()
         self.conf = conf
+
+        # 如果没有指定交换机，默认创建和队列名称相同的交换机
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
+
+        # 指定消息的routing_key和交换机队列的binding_key相同
         if binding_key:
             self.routing_key = binding_key
         elif exchange and queue:
+            # 如果没有指定binding_key,将routing_key设置成exchange-queue
             self.routing_key = '%s-%s' % (exchange, queue)
         else:
+            # 如果没有指定exchange和binding_key，将routing_key设置成与队列同名
             self.routing_key = queue
         self._connection = None
         self._channel = None
         self._closing = False
-        self._consumer_tag = None
-        self.start()
+        self._consumer_tag = None       # 消费者标记
+        self.start()                    # 启动消费者，执行self.run方法
 
     def __del__(self):
+        """ 析构函数，释放通道和连接
+
+        """
         self.close_channel()
         self.close_connection()
 
     def connect(self):
-        """This method connects to RabbitMQ, returning the connection handle.
-        When the connection is established, the on_connection_open method
-        will be invoked by pika.
+        """ 连接RabbitMQ, 返回连接句柄. 当连接建立后，on_connection_open方法将会被调用
 
-        :rtype: pika.SelectConnection
         """
         LOGGER.info('Connecting to %s' % self.conf.mq_hosts)
         connection_params = pika.ConnectionParameters(
@@ -59,32 +114,24 @@ class Consumer(threading.Thread):
                                      on_close_callback=None,
                                      stop_ioloop_on_close=False)
 
-    def on_connection_open(self, unused_connection):
-        """This method is called by pika once the connection to RabbitMQ has
-        been established. It passes the handle to the connection object in
-        case we need it, but in this case, we'll just mark it unused.
+    def on_connection_open(self, connection):
+        """ 连接建立成功后，该方法被调用； 注册连接关闭响应函数以及建立通道
 
-        :type unused_connection: pika.SelectConnection
         """
         LOGGER.info('Connection opened')
         self.add_on_connection_close_callback()
         self.open_channel()
 
     def add_on_connection_close_callback(self):
-        """This method adds an on close callback that will be invoked by pika
-        when RabbitMQ closes the connection to the publisher unexpectedly.
+        """ 注册连接关闭响应函数
+
         """
         LOGGER.info('Adding connection close callback')
         self._connection.add_on_close_callback(self.on_connection_closed)
 
     def on_connection_closed(self, connection, reply_code, reply_text):
-        """This method is invoked by pika when the connection to RabbitMQ is
-        closed unexpectedly. Since it is unexpected, we will reconnect to
-        RabbitMQ if it disconnects.
+        """ 连接关闭响应函数
 
-        :param pika.connection.Connection connection: The closed connection obj
-        :param int reply_code: The server provided reply_code if given
-        :param str reply_text: The server provided reply_text if given
         """
         self._channel = None
         if self._closing:
@@ -94,36 +141,25 @@ class Consumer(threading.Thread):
             self._connection.add_timeout(5, self.reconnect)
 
     def reconnect(self):
-        """Will be invoked by the IOLoop timer if the connection is
-        closed. See the on_connection_closed method.
+        """ 当连接关闭时，重连RabbitMQ
 
         """
-        # This is the old connection IOLoop instance, stop its ioloop
-        self._connection.ioloop.stop()
+
+        self._connection.ioloop.stop()          # 停止之前的ioloop实例
 
         if not self._closing:
-            # Create a new connection
-            self._connection = self.connect()
-
-            # There is now a new connection, needs a new ioloop to run
-            self._connection.ioloop.start()
+            self._connection = self.connect()   # 创建新的连接
+            self._connection.ioloop.start()     # 在新的连接上启动ioloop
 
     def open_channel(self):
-        """Open a new channel with RabbitMQ by issuing the Channel.Open RPC
-        command. When RabbitMQ responds that the channel is open, the
-        on_channel_open callback will be invoked by pika.
+        """ 建立连接通道，给RabbitMQ发送Channel.Open命令，当接收到Channel.Open.OK时表示通道已建立
 
         """
         LOGGER.info('Creating a new channel')
         self._connection.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel):
-        """This method is invoked by pika when the channel has been opened.
-        The channel object is passed in so we can make use of it.
-
-        Since the channel is now open, we'll declare the exchange to use.
-
-        :param pika.channel.Channel channel: The channel object
+        """ 当收到Channel.Open.OK命令时，会调用该函数
 
         """
         LOGGER.info('Channel opened')
@@ -132,34 +168,21 @@ class Consumer(threading.Thread):
         self.setup_exchange(self.exchange)
 
     def add_on_channel_close_callback(self):
-        """This method tells pika to call the on_channel_closed method if
-        RabbitMQ unexpectedly closes the channel.
+        """ 注册连接通道关闭响应函数
 
         """
         LOGGER.info('Adding channel close callback')
         self._channel.add_on_close_callback(self.on_channel_closed)
 
     def on_channel_closed(self, channel, reply_code, reply_text):
-        """Invoked by pika when RabbitMQ unexpectedly closes the channel.
-        Channels are usually closed if you attempt to do something that
-        violates the protocol, such as re-declare an exchange or queue with
-        different parameters. In this case, we'll close the connection
-        to shutdown the object.
-
-        :param pika.channel.Channel: The closed channel
-        :param int reply_code: The numeric reason the channel was closed
-        :param str reply_text: The text reason the channel was closed
+        """ 连接通道关闭响应函数, 在这里我们仅仅做了关闭连接
 
         """
         LOGGER.warning('Channel %i was closed: (%s) %s' % (channel, reply_code, reply_text))
         self._connection.close()
 
     def setup_exchange(self, exchange_name):
-        """Setup the exchange on RabbitMQ by invoking the Exchange.Declare RPC
-        command. When it is complete, the on_exchange_declareok method will
-        be invoked by pika.
-
-        :param str|unicode exchange_name: The name of the exchange to declare
+        """ 创建交换机，向RabbitMQ发送Exchange.Declare命令
 
         """
         LOGGER.info('Declaring exchange %s' % exchange_name)
@@ -168,59 +191,36 @@ class Consumer(threading.Thread):
                                        self.exchange_type,
                                        durable=True)
 
-    def on_exchange_declareok(self, unused_frame):
-        """Invoked by pika when RabbitMQ has finished the Exchange.Declare RPC
-        command.
-
-        :param pika.Frame.Method unused_frame: Exchange.DeclareOk response frame
+    def on_exchange_declareok(self, method_frame):
+        """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
 
         """
         LOGGER.info('Exchange declared')
         self.setup_queue(self.queue)
 
     def setup_queue(self, queue_name):
-        """Setup the queue on RabbitMQ by invoking the Queue.Declare RPC
-        command. When it is complete, the on_queue_declareok method will
-        be invoked by pika.
-
-        :param str|unicode queue_name: The name of the queue to declare.
+        """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOGGER.info('Declaring queue %s' % queue_name)
         self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
     def on_queue_declareok(self, method_frame):
-        """Method invoked by pika when the Queue.Declare RPC call made in
-        setup_queue has completed. In this method we will bind the queue
-        and exchange together with the routing key by issuing the Queue.Bind
-        RPC command. When this command is complete, the on_bindok method will
-        be invoked by pika.
-
-        :param pika.frame.Method method_frame: The Queue.DeclareOk frame
+        """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
 
         """
         LOGGER.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
         self._channel.queue_bind(self.on_bindok, self.queue, self.exchange, self.routing_key)
 
-    def on_bindok(self, unused_frame):
-        """Invoked by pika when the Queue.Bind method has completed. At this
-        point we will start consuming messages by calling start_consuming
-        which will invoke the needed RPC commands to start the process.
-
-        :param pika.frame.Method unused_frame: The Queue.BindOk response frame
+    def on_bindok(self, method_frame):
+        """ 交换机和队列绑定成功响应函数
 
         """
         LOGGER.info('Queue bound')
         self.start_consuming()
 
     def start_consuming(self):
-        """This method sets up the consumer by first calling
-        add_on_cancel_callback so that the object is notified if RabbitMQ
-        cancels the consumer. It then issues the Basic.Consume RPC command
-        which returns the consumer tag that is used to uniquely identify the
-        consumer with RabbitMQ. We keep the value to use it when we want to
-        cancel consuming. The on_message method is passed in as a callback pika
-        will invoke when a message is fully received.
+        """ 准备消费消息
 
         """
         LOGGER.info('Issuing consumer related RPC commands')
@@ -228,90 +228,71 @@ class Consumer(threading.Thread):
         self._consumer_tag = self._channel.basic_consume(self.on_message, self.queue)
 
     def add_on_cancel_callback(self):
-        """Add a callback that will be invoked if RabbitMQ cancels the consumer
-        for some reason. If RabbitMQ does cancel the consumer,
-        on_consumer_cancelled will be invoked by pika.
+        """ 注册注销消费者响应函数
 
         """
         LOGGER.info('Adding consumer cancellation callback')
         self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
     def on_consumer_cancelled(self, method_frame):
-        """Invoked by pika when RabbitMQ sends a Basic.Cancel for a consumer
-        receiving messages.
-
-        :param pika.frame.Method method_frame: The Basic.Cancel frame
+        """ 注销消费者响应函数
 
         """
         LOGGER.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
         if self._channel:
             self._channel.close()
 
-    def on_message(self, unused_channel, basic_deliver, properties, body):
+    def on_message(self, channel, method, props, body):
+        """ 消息处理函数， 每当接收到一个完整消息后会调用该函数
+
+        """
         message = json.loads(body)
         self.handle_message(message)
-        self.acknowledge_message(delivery_tag=basic_deliver.delivery_tag)
+        self.acknowledge_message(delivery_tag=method.delivery_tag)
 
     def handle_message(self, message):
         print 'receive message: %s' % message
         return message
 
     def acknowledge_message(self, delivery_tag):
-        """Acknowledge the message delivery from RabbitMQ by sending a
-        Basic.Ack RPC method for the delivery tag.
-
-        :param int delivery_tag: The delivery tag from the Basic.Deliver frame
+        """ 对收到的消息进行确认
 
         """
         LOGGER.info('Acknowledging message %s' % delivery_tag)
         self._channel.basic_ack(delivery_tag)
 
     def stop_consuming(self):
-        """Tell RabbitMQ that you would like to stop consuming by sending the
-        Basic.Cancel RPC command.
+        """ 注销当前消费者，向RabbitMQ发送Basic.Cancel命令
 
         """
         if self._channel:
             LOGGER.info('Sending a Basic.Cancel RPC command to RabbitMQ')
             self._channel.basic_cancel(self.on_cancelok, self._consumer_tag)
 
-    def on_cancelok(self, unused_frame):
-        """This method is invoked by pika when RabbitMQ acknowledges the
-        cancellation of a consumer. At this point we will close the channel.
-        This will invoke the on_channel_closed method once the channel has been
-        closed, which will in-turn close the connection.
-
-        :param pika.frame.Method unused_frame: The Basic.CancelOk frame
+    def on_cancelok(self, method_frame):
+        """ 注销消费者成功响应函数，收到Basic.CancelOk命令
 
         """
         LOGGER.info('RabbitMQ acknowledged the cancellation of the consumer')
         self.close_channel()
 
     def close_channel(self):
-        """Call to close the channel with RabbitMQ cleanly by issuing the
-        Channel.Close RPC command.
+        """ 主动关闭连接通道，发送Channel.Close命令给RabbitMQ
 
         """
         LOGGER.info('Closing the channel')
         self._channel.close()
 
     def run(self):
-        """Run the example consumer by connecting to RabbitMQ and then
-        starting the IOLoop to block and allow the SelectConnection to operate.
+        """ 建立到RabbitMQ的连接，启动IOLoop阻塞等待SelectConnection处理
 
         """
         self._connection = self.connect()
         self._connection.ioloop.start()
 
     def stop(self):
-        """Cleanly shutdown the connection to RabbitMQ by stopping the consumer
-        with RabbitMQ. When RabbitMQ confirms the cancellation, on_cancelok
-        will be invoked by pika, which will then closing the channel and
-        connection. The IOLoop is started again because this method is invoked
-        when CTRL-C is pressed raising a KeyboardInterrupt exception. This
-        exception stops the IOLoop which needs to be running for pika to
-        communicate with RabbitMQ. All of the commands issued prior to starting
-        the IOLoop will be buffered but not processed.
+        """ 主动注销消费者并关闭连接，当RabbitMQ确认注销消费者后，on_cancelok函数
+        将会被调用，在这个函数里关闭连接通道和连接
 
         """
         LOGGER.info('Stopping')
@@ -321,23 +302,42 @@ class Consumer(threading.Thread):
         LOGGER.info('Stopped')
 
     def close_connection(self):
-        """This method closes the connection to RabbitMQ."""
+        """ 主动关闭连接
+
+        """
         LOGGER.info('Closing connection')
         self._connection.close()
 
 
 class Publisher(threading.Thread):
+    """ 消息生产者基类
+
+    """
     def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
+        """ 构造函数
+        :param conf: ConfigOpts, 配置文件对象
+        :param queue: str, 连接队列名称
+        :param exchange: str, 交换机名称
+        :param exchange_type: str, 交换机类型
+        :param binding_key: str, 交换机和队列绑定的 binding_key
+
+        """
         super(Publisher, self).__init__()
         self.conf = conf
+
+        # 如果没有指定交换机，默认创建和队列名称相同的交换机
         self.exchange = queue if exchange is None else exchange
         self.exchange_type = exchange_type
         self.queue = queue
+
+        # 指定消息的routing_key和交换机队列的binding_key相同
         if binding_key:
             self.routing_key = binding_key
         elif exchange and queue:
+            # 如果没有指定binding_key,将routing_key设置成exchange-queue
             self.routing_key = '%s-%s' % (exchange, queue)
         else:
+            # 如果没有指定exchange和binding_key，将routing_key设置成与队列同名
             self.routing_key = queue
         self._connection = None
         self._channel = None
@@ -347,13 +347,19 @@ class Publisher(threading.Thread):
         self._message_number = 0
         self._stopping = False
         self._closing = False
-        self.start()
+        self.start()                    # 启动生产者，执行self.run方法
 
     def __del__(self):
+        """ 析构函数，释放通道和连接
+
+        """
         self.close_channel()
         self.close_connection()
 
     def connect(self):
+        """ 连接RabbitMQ, 返回连接句柄. 当连接建立后，on_connection_open方法将会被调用
+
+        """
         LOG.info('Connecting to %s' % self.conf.mq_hosts)
         connection_params = pika.ConnectionParameters(
             host=self.conf.mq_hosts,
@@ -367,15 +373,24 @@ class Publisher(threading.Thread):
                                      stop_ioloop_on_close=False)
 
     def on_connection_open(self, connection):
+        """ 连接建立成功后，该方法被调用； 注册连接关闭响应函数以及建立通道
+
+        """
         LOG.info('Connection opened')
         self.add_on_connection_close_callback()
         self.open_channel()
 
     def add_on_connection_close_callback(self):
+        """ 注册连接关闭响应函数
+
+        """
         LOG.info('Adding connection close callback')
         self._connection.add_on_close_callback(self.on_connection_closed)
 
     def on_connection_closed(self, connection, reply_code, reply_text):
+        """ 连接关闭响应函数
+
+        """
         self._channel = None
         if self._closing:
             self._connection.ioloop.stop()
@@ -384,6 +399,9 @@ class Publisher(threading.Thread):
             self._connection.add_timeout(5, self.reconnect)
 
     def reconnect(self):
+        """ 当连接关闭时，重连RabbitMQ
+
+        """
         self._deliveries = []
         self._acked = 0
         self._nacked = 0
@@ -393,41 +411,68 @@ class Publisher(threading.Thread):
         self._connection.ioloop.start()
 
     def open_channel(self):
+        """ 建立连接通道，给RabbitMQ发送Channel.Open命令，当接收到Channel.Open.OK时表示通道已建立
+
+        """
         LOG.info('Creating a new channel')
         self._connection.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel):
+        """ 当收到Channel.Open.OK命令时，会调用该函数
+
+        """
         LOG.info('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
         self.setup_exchange(self.exchange)
 
     def add_on_channel_close_callback(self):
+        """ 注册连接通道关闭响应函数
+
+        """
         LOG.info('Adding channel close callback')
         self._channel.add_on_close_callback(self.on_channel_closed)
 
     def on_channel_closed(self, channel, reply_code, reply_text):
+        """ 连接通道关闭响应函数, 在这里我们仅仅做了关闭连接
+
+        """
         LOG.warning('Channel was closed: (%s) %s' % (reply_code, reply_text))
         if not self._closing:
             self._connection.close()
 
     def setup_exchange(self, exchange_name):
+        """ 创建交换机，向RabbitMQ发送Exchange.Declare命令
+
+        """
         LOG.info('Declaring exchange %s' % exchange_name)
         self._channel.exchange_declare(self.on_exchange_declareok, exchange_name, self.exchange_type, durable=True)
 
-    def on_exchange_declareok(self, unused_frame):
+    def on_exchange_declareok(self, method_frame):
+        """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
+
+        """
         LOG.info('Exchange declared')
         self.setup_queue(self.queue)
 
     def setup_queue(self, queue_name):
+        """ 创建队列，向RabbitMQ发送Queue.Declare命令
+
+        """
         LOG.info('Declaring queue %s' % queue_name)
         self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
     def on_queue_declareok(self, method_frame):
+        """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
+
+        """
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
         self._channel.queue_bind(self.on_bindok, self.queue, self.exchange, self.routing_key)
 
-    def on_bindok(self, unused_frame):
+    def on_bindok(self, method_frame):
+        """ 交换机和队列绑定成功响应函数
+
+        """
         LOG.info('Queue bound')
         self.start_publishing()
 
@@ -479,15 +524,25 @@ class Publisher(threading.Thread):
         LOG.info('Published message # %i' % self._message_number)
 
     def close_channel(self):
+        """ 主动关闭连接通道，发送Channel.Close命令给RabbitMQ
+
+        """
         LOG.info('Closing the channel')
         if self._channel:
             self._channel.close()
 
     def run(self):
+        """ 建立到RabbitMQ的连接，启动IOLoop阻塞等待SelectConnection处理
+
+        """
         self._connection = self.connect()
         self._connection.ioloop.start()
 
     def stop(self):
+        """ 主动注销消费者并关闭连接，当RabbitMQ确认注销消费者后，on_cancelok函数
+            将会被调用，在这个函数里关闭连接通道和连接
+
+        """
         LOG.info('Stopping')
         self._stopping = True
         self.close_channel()
@@ -496,6 +551,9 @@ class Publisher(threading.Thread):
         LOG.info('Stopped')
 
     def close_connection(self):
+        """ 主动关闭连接
+
+        """
         LOG.info('Closing connection')
         self._closing = True
         self._connection.close()
@@ -532,34 +590,55 @@ class RpcPublisher(Publisher):
         self._channel.queue_delete(queue=self.callback_queue)
 
     def setup_queue_rpc(self, queue_name):
+        """ 创建队列，向RabbitMQ发送Queue.Declare命令
+
+        """
         LOG.info('Declaring queue %s' % queue_name)
         while not self._channel:
             time.sleep(1)
         self._channel.queue_declare(self.on_queue_declareok_rpc, queue_name, durable=True)
 
     def on_queue_declareok_rpc(self, method_frame):
+        """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
+
+        """
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.callback_queue, self.callback_queue))
         self._channel.queue_bind(self.on_bindok_rpc, self.callback_queue, self.exchange, self.callback_queue)
 
     def on_bindok_rpc(self, unused_frame):
+        """ 交换机和队列绑定成功响应函数
+
+        """
         LOG.info('Queue bound')
         self.start_consuming_rpc()
 
     def start_consuming_rpc(self):
+        """ 准备消费消息
+
+        """
         LOG.info('Issuing consumer related RPC commands')
         self.add_on_cancel_callback_rpc()
         self._consumer_tag = self._channel.basic_consume(self.on_message, self.callback_queue)
 
     def add_on_cancel_callback_rpc(self):
+        """ 注册注销消费者响应函数
+
+        """
         LOG.info('Adding consumer cancellation callback')
         self._channel.add_on_cancel_callback(self.on_consumer_cancelled_rpc)
 
     def on_consumer_cancelled_rpc(self, method_frame):
+        """ 注销消费者响应函数
+
+        """
         LOG.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
         if self._channel:
             self._channel.close()
 
     def on_message(self, channel, method, props, body):
+        """ 消息处理函数， 每当接收到一个完整消息后会调用该函数
+
+        """
         if props.correlation_id == self.correlation_id:
             self.response = json.loads(body)
         channel.basic_ack(delivery_tag=method.delivery_tag)
