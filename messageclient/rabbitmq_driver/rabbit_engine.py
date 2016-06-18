@@ -10,11 +10,12 @@
 import pika
 import threading
 import random
-from messageclient import LOG
 import traceback
 import json
 import uuid
+import messageclient
 
+from messageclient import LOG
 
 class PikaEngine(object):
     """
@@ -176,6 +177,24 @@ class Transport(object):
                                    routing_key=target.queue,
                                    properties=properties,
                                    body=json.dumps(message.data))
+
+    def receive_response(self, target):
+        """ 异步接收回调队列消息
+
+        """
+        messageclient.receive_response(self, target)
+
+    def send_message(self, target, message):
+        """ 阻塞发送消息，返回消息响应结果
+
+        """
+        return self.send_rpc(target, message)
+
+    def broadcast_message(self, message):
+        """ 广播消息
+
+        """
+        return self.notify(message)
 
 
 def get_transport(conf):

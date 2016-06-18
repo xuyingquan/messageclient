@@ -70,8 +70,8 @@
     
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, header={'type': 'test'}, body={})
-    result = messageclient.send_message(message)
+    message = messageclient.Message(header={'type': 'test'}, body={})
+    result = transport.send_message(message)
     
 
 ### 接收处理消息（服务端）
@@ -103,9 +103,9 @@
 
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, header={'type': 'test'}, body={})
-    messageclient.send_request(message)                     # 或者 messageclient.send_message(message, mode='async')
-    messagecient.receive_response(transport, target)        # non-blocking call, return immediately
+    message = messageclient.Message(header={'type': 'test'}, body={})
+    transport.send_request(message)
+    transport.receive_response(transport, target)        # non-blocking call, return immediately
 
     # ... main thread handle
 
