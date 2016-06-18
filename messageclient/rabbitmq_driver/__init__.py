@@ -247,12 +247,42 @@ class Consumer(threading.Thread):
 
         """
         message = json.loads(body)
-        self.handle_message(message)
-        self.acknowledge_message(delivery_tag=method.delivery_tag)
+        msg_type = message['header']['type']            # 获取消息头部
+        msg_body = message['body']                      # 获取消息体
 
-    def handle_message(self, message):
-        print 'receive message: %s' % message
-        return message
+        # 获取消息处理函数
+        if msg_type in CALLBACK_MANAGER:
+            _do_task = CALLBACK_MANAGER[msg_type]
+        else:
+            self.acknowledge_message(delivery_tag=method.delivery_tag)
+            LOG.error('message handler %s is not implemented' % msg_type)
+            return
+
+        # 执行消息处理函数
+        result = _do_task(msg_body)
+
+        # 根据结果判断是否要给发送者响应
+        if result is None:
+            self.acknowledge_message(delivery_tag=method.delivery_tag)
+        else:
+            return_msg = dict()
+            return_msg['header'] = message['header']
+            return_msg['body'] = result
+            self.send_result(channel, props, return_msg)
+            self.acknowledge_message(delivery_tag=method.delivery_tag)
+
+    def send_result(self, channel, props, result):
+        """ 给发送端返回消息响应结果
+
+        """
+        message_properties = pika.BasicProperties(correlation_id=props.correlation_id)
+        callback_queue = props.reply_to
+
+        # 返回处理结果
+        channel.basic_publish(exchange='',
+                              routing_key=callback_queue,
+                              properties=message_properties,
+                              body=json.dumps(result))
 
     def acknowledge_message(self, delivery_tag):
         """ 对收到的消息进行确认

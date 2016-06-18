@@ -15,7 +15,7 @@ class CONF:
 def on_message(message):
     print 'receive message: ', message
     result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
-    # return result
+    return result
 
 
 transport = messageclient.get_transport(CONF)

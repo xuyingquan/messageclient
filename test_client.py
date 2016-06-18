@@ -36,11 +36,14 @@ def on_response(message):
 def main():
     transport = messageclient.get_transport(CONF)
     target = messageclient.Target(queue='IaasService')
-    message = messageclient.Message(transport, target, header={'type': 'test'}, body=msg_body)
+    message1 = messageclient.Message(transport, target, header={'type': 'test'}, body=msg_body)
 
-    # print messageclient.send_message(message)
+    print messageclient.send_message(message1)
 
-    messageclient.send_request(message)
+    message2 = messageclient.Message(transport, target, header={'type': 'test'}, body=msg_body)
+    print messageclient.send_message(message2)
+
+    #messageclient.send_request(message)
     # messageclient.receive_response(transport, target)
 
 

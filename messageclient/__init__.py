@@ -46,11 +46,11 @@ def send_message(message, mode='rpc'):
 
     """
     if mode == 'rpc':
-        return message.send_rpc()
+        return message.transport.send_rpc(message.target, message)
     elif mode == 'notify':
-        return message.notify()
+        return message.transport.notify(message)
     elif mode == 'async':
-        return message.send_request()
+        return message.transport.send_request(message)
     else:
         return None
 
