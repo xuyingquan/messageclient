@@ -199,7 +199,7 @@ def send_request(message):
     :param message: 消息对象
 
     """
-    message.send_request()
+    message.transport.send_request(message.target, message)
 
 
 def receive_response(transport, target):
