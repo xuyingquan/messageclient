@@ -111,7 +111,7 @@ class Transport(object):
         self.channel.close()
         self.connection.close()
 
-    def send_rpc(self, target, message, callback_queue=None):
+    def send_rpc(self, target, message, reply_queue=None):
         """ 阻塞发送消息
         """
         self.response = None
@@ -119,8 +119,8 @@ class Transport(object):
 
         # 创建目标消息队列和回调消息队列
         self.channel.queue_declare(queue=target.queue, durable=True)  # queue durable
-        if callback_queue is not None:
-            callback_queue = callback_queue
+        if reply_queue is not None:
+            callback_queue = reply_queue
         else:
             callback_queue = '%s-callback' % target.queue
         self.channel.queue_declare(queue=callback_queue, durable=True)
@@ -164,7 +164,7 @@ class Transport(object):
                                    body=json.dumps(message.data))
         return None
 
-    def send_request(self, target, message):
+    def send_request(self, target, message, reply_queue=None):
         """ 非阻塞发送消息请求
         """
 
@@ -172,7 +172,10 @@ class Transport(object):
         self.channel.queue_declare(queue=target.queue, durable=True)  # queue durable
 
         # 创建回调队列
-        callback_queue = '%s-callback' % target.queue
+        if reply_queue is not None:
+            callback_queue = reply_queue
+        else:
+            callback_queue = '%s-callback' % target.queue
         self.channel.queue_declare(queue=callback_queue, durable=True)
 
         # 设置消息属性

@@ -106,7 +106,7 @@
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(header={'type': 'test'}, body={})
-    transport.send_request(message)
+    transport.send_request(target, message, relpy_queue='IaasService-Reply-1')
     transport.receive_response(transport, target)        # non-blocking call, return immediately
 
     # ... main thread handle
