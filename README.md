@@ -7,7 +7,7 @@
 *模块使用指南*
 
 
-*多客户端rpc调用*
+*类接口*
 
 ### 服务端实现
     from messageclient import RpcConsumer
@@ -26,18 +26,20 @@
     conf.register_opts(rabbit_opts)
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
-    class TestConsumer(RpcConsumer):
+    class TestConsumer(Consumer):
         def __init__(self, conf, queue):
             super(TestConsumer, self).__init__(conf, queue)
         
+        @messageclient.on_message_v1(type='test')
         def handle_message(self, message):
             print 'Receive Message: %s' % message
+            return dict(relpy='hello world')
 
     if __name__ == '__main__':
         consumer = TestConsumer(conf, 'rpc')
 
 ### 客户端实现
-    from messageclient import PpcPublisher
+    from messageclient import RpcPublisher
     from oslo_config import cfg
 
     conf = cfg.CONF

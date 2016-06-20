@@ -25,7 +25,7 @@ else:
 if version != '':
     version = '%s.%s' % (version, batch_num)
 else:
-    version = '0.0.0.1'
+    version = '1.3.2'
 
 setup(
     name=name,

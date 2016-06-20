@@ -44,7 +44,8 @@ def main():
 
     if test_method == 'sync':
         # 测试阻塞发送消息
-        result = transport.send_message(target, message)
+        result = transport.send_message(target, message, callback_queue="xyq-callback-1")
+        print transport.send_message(target, message, callback_queue='xyq-callback-1')
     elif test_method == 'async':
         # 测试异步发送消息
         transport.send_request(target, message)
