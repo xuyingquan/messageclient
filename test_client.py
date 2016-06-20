@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import messageclient
 import time
 
@@ -37,11 +39,22 @@ def main():
     transport = messageclient.get_transport(CONF)
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(header={'type': 'test'}, body=msg_body)
-    print transport.send_message(target, message)
 
-    #messageclient.send_request(message)
-    # messageclient.receive_response(transport, target)
+    result = None
+
+    if test_method == 'sync':
+        # 测试阻塞发送消息
+        result = transport.send_message(target, message)
+    elif test_method == 'async':
+        # 测试异步发送消息
+        transport.send_request(target, message)
+        transport.receive_response(target)
+    else:
+        pass
+
+    print result
 
 
 if __name__ == '__main__':
+    test_method = 'sync'
     main()

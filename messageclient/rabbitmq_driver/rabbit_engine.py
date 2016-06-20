@@ -17,6 +17,7 @@ import messageclient
 
 from messageclient import LOG
 
+
 class PikaEngine(object):
     """
     Used for shared functionality between other pika driver modules, like
@@ -110,7 +111,7 @@ class Transport(object):
         self.channel.close()
         self.connection.close()
 
-    def send_rpc(self, target, message):
+    def send_rpc(self, target, message, callback_queue=None):
         """ 阻塞发送消息
         """
         self.response = None
@@ -118,7 +119,10 @@ class Transport(object):
 
         # 创建目标消息队列和回调消息队列
         self.channel.queue_declare(queue=target.queue, durable=True)  # queue durable
-        callback_queue = '%s-callback' % target.queue
+        if callback_queue is not None:
+            callback_queue = callback_queue
+        else:
+            callback_queue = '%s-callback' % target.queue
         self.channel.queue_declare(queue=callback_queue, durable=True)
 
         # 注册回调消息队列消息响应函数
@@ -189,11 +193,11 @@ class Transport(object):
         """
         messageclient.receive_response(self, target)
 
-    def send_message(self, target, message):
+    def send_message(self, target, message, callback_queue=None):
         """ 阻塞发送消息，返回消息响应结果
 
         """
-        return self.send_rpc(target, message)
+        return self.send_rpc(target, message, callback_queue)
 
     def broadcast_message(self, message):
         """ 广播消息

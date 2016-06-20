@@ -165,7 +165,7 @@ class Consumer(threading.Thread):
         LOGGER.info('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
-        self.setup_exchange(self.exchange)
+        self.setup_exchange(self.exchange, auto_make=True)
 
     def add_on_channel_close_callback(self):
         """ 注册连接通道关闭响应函数
@@ -181,29 +181,50 @@ class Consumer(threading.Thread):
         LOGGER.warning('Channel %i was closed: (%s) %s' % (channel, reply_code, reply_text))
         self._connection.close()
 
-    def setup_exchange(self, exchange_name):
+    def setup_exchange(self, exchange_name, auto_make=False):
         """ 创建交换机，向RabbitMQ发送Exchange.Declare命令
 
         """
         LOGGER.info('Declaring exchange %s' % exchange_name)
-        self._channel.exchange_declare(self.on_exchange_declareok,
-                                       exchange_name,
-                                       self.exchange_type,
-                                       durable=True)
+
+        # 非用户主动创建
+        if auto_make:
+            self._channel.exchange_declare(self.on_exchange_declareok,
+                                           exchange_name,
+                                           self.exchange_type,
+                                           durable=True)
+        # 此方法由用户主动调用创建交换机
+        else:
+            while not self._channel:
+                time.sleep(0.02)
+            self._channel.exchange_declare(callback=self.on_exchange_declareok,
+                                           exchange=exchange_name,
+                                           exchange_type=self.exchange_type,
+                                           nowait=True,
+                                           durable=True)
 
     def on_exchange_declareok(self, method_frame):
         """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
 
         """
         LOGGER.info('Exchange declared')
-        self.setup_queue(self.queue)
+        self.setup_queue(self.queue, auto_make=True)
 
-    def setup_queue(self, queue_name):
+    def setup_queue(self, queue_name, auto_make=False):
         """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOGGER.info('Declaring queue %s' % queue_name)
-        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
+
+        # 非用户主动创建队列
+        if auto_make:
+            self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
+
+        # 此方法由用户主动调用创建队列
+        else:
+            while not self._channel:
+                time.sleep(0.02)
+            self._channel.queue_declare(None, queue_name, nowait=True, durable=True)
 
     def on_queue_declareok(self, method_frame):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
@@ -212,20 +233,29 @@ class Consumer(threading.Thread):
         LOGGER.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
         self._channel.queue_bind(self.on_bindok, self.queue, self.exchange, self.routing_key)
 
+    def setup_binding(self, exchange, queue, binding_key):
+        """ 用户自己设置交换机和队列的binding
+
+        """
+        LOGGER.info('Binding %s to %s with %s' % (exchange, queue, binding_key))
+        self._channel.queue_bind(None, queue, exchange, binding_key, nowait=True)
+
     def on_bindok(self, method_frame):
         """ 交换机和队列绑定成功响应函数
 
         """
         LOGGER.info('Queue bound')
-        self.start_consuming()
+        self.start_consuming(self.on_message)
 
-    def start_consuming(self):
+    def start_consuming(self, callback=None):
         """ 准备消费消息
 
         """
+        if callback is None:
+            callback = self.on_message
         LOGGER.info('Issuing consumer related RPC commands')
         self.add_on_cancel_callback()
-        self._consumer_tag = self._channel.basic_consume(self.on_message, self.queue)
+        self._consumer_tag = self._channel.basic_consume(callback, self.queue)
 
     def add_on_cancel_callback(self):
         """ 注册注销消费者响应函数
@@ -259,7 +289,7 @@ class Consumer(threading.Thread):
             return
 
         # 执行消息处理函数
-        result = _do_task(msg_body)
+        result = _do_task(self, msg_body)
 
         # 根据结果判断是否要给发送者响应
         if result is None:

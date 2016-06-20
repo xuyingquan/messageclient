@@ -18,6 +18,7 @@ from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Tran
 from messageclient.rabbitmq_driver.rabbit_engine import get_transport
 from messageclient.rabbitmq_driver.rabbit_message import Message
 from messageclient.rabbitmq_driver import Consumer, Publisher, RpcPublisher, RpcConsumer
+from messageclient.rabbitmq_driver import on_message_v1
 
 
 message_handler = dict()            # 消息处理函数（用户定义）字典
