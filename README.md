@@ -71,7 +71,7 @@
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
     message = messageclient.Message(header={'type': 'test'}, body={})
-    result = transport.send_message(message)
+    result = transport.send_message(target, message, callback_queue='test')
     
 
 ### 接收处理消息（服务端）
