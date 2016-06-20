@@ -10,7 +10,7 @@
 *类接口*
 
 ### 服务端实现
-    from messageclient import RpcConsumer
+    import messageclient
     from oslo_config import cfg
 
     conf = cfg.CONF
@@ -26,14 +26,25 @@
     conf.register_opts(rabbit_opts)
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
-    class TestConsumer(Consumer):
+    class TestConsumer(messageclient.Consumer):
         def __init__(self, conf, queue):
             super(TestConsumer, self).__init__(conf, queue)
         
         @messageclient.on_message_v1(type='test')
-        def handle_message(self, message):
+        def handle_message_test(self, message):
+            """ 处理test类型的消息
+            
+            """
             print 'Receive Message: %s' % message
-            return dict(relpy='hello world')
+            return dict(result='ok')
+           
+        @messageclient.on_message_v1(type='iaas')
+        def handle_message_iaas(self, message):
+            """ 处理iaas类型的消息
+            
+            """
+            print 'Receive Message: %s' % message
+            return dict(result='ok')
 
     if __name__ == '__main__':
         consumer = TestConsumer(conf, 'rpc')

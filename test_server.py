@@ -10,7 +10,7 @@ class CONF:
     mq_virtual_host = '/'
     mq_heartbeat_interval = 2
 
-
+"""
 @messageclient.on_message(type='test')
 def on_message(message):
     print 'receive message: ', message
@@ -23,8 +23,8 @@ target = messageclient.Target(queue='IaasService', broadcast=False)  # receive b
 messageclient.start_consume_message(transport, target)
 LOG.info('hello world')
 
-
 """
+
 
 class TestConsumer(messageclient.Consumer):
     def __init__(self, conf, queue):
@@ -38,4 +38,4 @@ class TestConsumer(messageclient.Consumer):
 
 
 consumer = TestConsumer(CONF, 'IaasService')
-"""
+
