@@ -29,11 +29,11 @@ msg_body = {
     'tenant_name': 'admin'
 }
 
-
+"""
 @messageclient.on_message(type='test')
 def on_response(message):
     print 'receive message: %s' % message
-
+"""
 
 def main():
     transport = messageclient.get_transport(CONF)
@@ -45,6 +45,7 @@ def main():
     if test_method == 'sync':
         # 测试阻塞发送消息
         result = transport.send_message(target, message, callback_queue="xyq-callback-1")
+        target = messageclient.Target(queue='test')
         print transport.send_message(target, message, callback_queue='xyq-callback-1')
     elif test_method == 'async':
         # 测试异步发送消息

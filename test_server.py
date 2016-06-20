@@ -39,3 +39,6 @@ class TestConsumer(messageclient.Consumer):
 
 consumer = TestConsumer(CONF, 'IaasService')
 
+consumer2 = TestConsumer(CONF, 'test')
+
+

@@ -120,7 +120,7 @@ class Consumer(threading.Thread):
         """
         LOGGER.info('Connection opened')
         self.add_on_connection_close_callback()
-        self.open_channel()
+        self.open_channel(auto_make=True)
 
     def add_on_connection_close_callback(self):
         """ 注册连接关闭响应函数
@@ -151,12 +151,17 @@ class Consumer(threading.Thread):
             self._connection = self.connect()   # 创建新的连接
             self._connection.ioloop.start()     # 在新的连接上启动ioloop
 
-    def open_channel(self):
+    def open_channel(self, auto_make=False):
         """ 建立连接通道，给RabbitMQ发送Channel.Open命令，当接收到Channel.Open.OK时表示通道已建立
 
         """
         LOGGER.info('Creating a new channel')
-        self._connection.channel(on_open_callback=self.on_channel_open)
+        if auto_make:
+            self._connection.channel(on_open_callback=self.on_channel_open)
+        else:
+            while not self._connection:
+                time.sleep(0.02)
+            return self._connection.channel(on_open_callback=self.on_all_method)
 
     def on_channel_open(self, channel):
         """ 当收到Channel.Open.OK命令时，会调用该函数
@@ -181,27 +186,30 @@ class Consumer(threading.Thread):
         LOGGER.warning('Channel %i was closed: (%s) %s' % (channel, reply_code, reply_text))
         self._connection.close()
 
-    def setup_exchange(self, exchange_name, auto_make=False):
+    def setup_exchange(self, exchange_name, channel=None, auto_make=False):
         """ 创建交换机，向RabbitMQ发送Exchange.Declare命令
 
         """
         LOGGER.info('Declaring exchange %s' % exchange_name)
 
+        if channel is None:
+            channel = self._channel
+
         # 非用户主动创建
         if auto_make:
-            self._channel.exchange_declare(self.on_exchange_declareok,
-                                           exchange_name,
-                                           self.exchange_type,
-                                           durable=True)
+            channel.exchange_declare(self.on_exchange_declareok,
+                                     exchange_name,
+                                     self.exchange_type,
+                                     durable=True)
         # 此方法由用户主动调用创建交换机
         else:
-            while not self._channel:
+            while not channel.is_open:
                 time.sleep(0.02)
-            self._channel.exchange_declare(callback=self.on_exchange_declareok,
-                                           exchange=exchange_name,
-                                           exchange_type=self.exchange_type,
-                                           nowait=True,
-                                           durable=True)
+            channel.exchange_declare(callback=self.on_all_method,
+                                     exchange=exchange_name,
+                                     exchange_type=self.exchange_type,
+                                     nowait=False,
+                                     durable=True)
 
     def on_exchange_declareok(self, method_frame):
         """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
@@ -210,21 +218,30 @@ class Consumer(threading.Thread):
         LOGGER.info('Exchange declared')
         self.setup_queue(self.queue, auto_make=True)
 
-    def setup_queue(self, queue_name, auto_make=False):
+    def on_all_method(self, method_frame):
+        """ 响应所有方法帧, 不做任何处理
+
+        """
+        pass
+
+    def setup_queue(self, queue_name, channel=None, auto_make=False):
         """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOGGER.info('Declaring queue %s' % queue_name)
 
+        if channel is None:
+            channel = self._channel
+
         # 非用户主动创建队列
         if auto_make:
-            self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
+            channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
 
         # 此方法由用户主动调用创建队列
         else:
-            while not self._channel:
+            while not channel.is_open:
                 time.sleep(0.02)
-            self._channel.queue_declare(None, queue_name, nowait=True, durable=True)
+            channel.queue_declare(self.on_all_method, queue_name, nowait=False, durable=True)
 
     def on_queue_declareok(self, method_frame):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
@@ -233,44 +250,61 @@ class Consumer(threading.Thread):
         LOGGER.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
         self._channel.queue_bind(self.on_bindok, self.queue, self.exchange, self.routing_key)
 
-    def setup_binding(self, exchange, queue, binding_key):
+    def setup_binding(self, exchange, queue, binding_key, channel=None):
         """ 用户自己设置交换机和队列的binding
 
         """
+        if channel is None:
+            channel = self._channel
         LOGGER.info('Binding %s to %s with %s' % (exchange, queue, binding_key))
-        self._channel.queue_bind(None, queue, exchange, binding_key, nowait=True)
+
+        while not channel.is_open:
+            time.sleep(0.02)
+        channel.queue_bind(self.on_all_method, queue, exchange, binding_key, nowait=True)
 
     def on_bindok(self, method_frame):
         """ 交换机和队列绑定成功响应函数
 
         """
         LOGGER.info('Queue bound')
-        self.start_consuming(self.on_message)
+        self.start_consuming(callback=self.on_message)
 
-    def start_consuming(self, callback=None):
+    def start_consuming(self, channel=None, queue=None, callback=None):
         """ 准备消费消息
 
         """
+        if channel is None:
+            channel = self._channel
+
         if callback is None:
             callback = self.on_message
-        LOGGER.info('Issuing consumer related RPC commands')
-        self.add_on_cancel_callback()
-        self._consumer_tag = self._channel.basic_consume(callback, self.queue)
 
-    def add_on_cancel_callback(self):
+        if queue is None:
+            queue = self.queue
+
+        LOGGER.info('Issuing consumer related RPC commands')
+        self.add_on_cancel_callback(channel)
+
+        while not channel.is_open:
+            time.sleep(0.02)
+        self._consumer_tag = channel.basic_consume(callback, queue)
+
+    def add_on_cancel_callback(self, channel=None):
         """ 注册注销消费者响应函数
 
         """
         LOGGER.info('Adding consumer cancellation callback')
-        self._channel.add_on_cancel_callback(self.on_consumer_cancelled)
+        channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
-    def on_consumer_cancelled(self, method_frame):
+    def on_consumer_cancelled(self, method_frame, channel=None):
         """ 注销消费者响应函数
 
         """
+        if channel is None:
+            channel = self._channel
         LOGGER.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
-        if self._channel:
-            self._channel.close()
+        if channel:
+            channel.close()
 
     def on_message(self, channel, method, props, body):
         """ 消息处理函数， 每当接收到一个完整消息后会调用该函数
@@ -284,7 +318,7 @@ class Consumer(threading.Thread):
         if msg_type in CALLBACK_MANAGER:
             _do_task = CALLBACK_MANAGER[msg_type]
         else:
-            self.acknowledge_message(delivery_tag=method.delivery_tag)
+            self.acknowledge_message(delivery_tag=method.delivery_tag, channel=channel)
             LOG.error('message handler %s is not implemented' % msg_type)
             return
 
@@ -293,13 +327,13 @@ class Consumer(threading.Thread):
 
         # 根据结果判断是否要给发送者响应
         if result is None:
-            self.acknowledge_message(delivery_tag=method.delivery_tag)
+            self.acknowledge_message(delivery_tag=method.delivery_tag, channel=channel)
         else:
             return_msg = dict()
             return_msg['header'] = message['header']
             return_msg['body'] = result
             self.send_result(channel, props, return_msg)
-            self.acknowledge_message(delivery_tag=method.delivery_tag)
+            self.acknowledge_message(delivery_tag=method.delivery_tag, channel=channel)
 
     def send_result(self, channel, props, result):
         """ 给发送端返回消息响应结果
@@ -314,12 +348,15 @@ class Consumer(threading.Thread):
                               properties=message_properties,
                               body=json.dumps(result))
 
-    def acknowledge_message(self, delivery_tag):
+    def acknowledge_message(self, delivery_tag, channel=None):
         """ 对收到的消息进行确认
 
         """
         LOGGER.info('Acknowledging message %s' % delivery_tag)
-        self._channel.basic_ack(delivery_tag)
+
+        if channel is None:
+            channel = self._channel
+        channel.basic_ack(delivery_tag)
 
     def stop_consuming(self):
         """ 注销当前消费者，向RabbitMQ发送Basic.Cancel命令
