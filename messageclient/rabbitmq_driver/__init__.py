@@ -59,7 +59,7 @@ class Consumer(threading.Thread):
     """ 消息消费者基类
 
     """
-    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
+    def __init__(self, conf, queue, exchange='devops', exchange_type='topic', binding_key=None):
         """ 构造函数
         :param conf: ConfigOpts, 配置文件对象
         :param queue: str, 连接队列名称
@@ -79,12 +79,8 @@ class Consumer(threading.Thread):
         # 指定消息的routing_key和交换机队列的binding_key相同
         if binding_key:
             self.routing_key = binding_key
-        elif exchange and queue:
-            # 如果没有指定binding_key,将routing_key设置成exchange-queue
-            self.routing_key = '%s-%s' % (exchange, queue)
         else:
-            # 如果没有指定exchange和binding_key，将routing_key设置成与队列同名
-            self.routing_key = queue
+            self.routing_key = '#.%s.#' % queue    # 将routing_key设置成与队列同名
         self._connection = None
         self._channel = None
         self._closing = False
@@ -328,7 +324,7 @@ class Consumer(threading.Thread):
         result = _do_task(self, msg_body)
 
         # 根据结果判断是否要给发送者响应
-        if result is None:
+        if result is None or not props.reply_to:
             self.acknowledge_message(delivery_tag=method.delivery_tag, channel=channel)
         else:
             return_msg = dict()
