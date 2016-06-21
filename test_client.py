@@ -59,4 +59,11 @@ def main():
 
 if __name__ == '__main__':
     test_method = 'sync'
-    main()
+    # main()
+    from messageclient import RpcPublisher
+    publisher = RpcPublisher(CONF)
+    message = messageclient.Message(header={'type': 'test'}, body=msg_body)
+    result = publisher.send_message(message, queue='IaasService', reply_queue='iaas-reply')
+    print result
+    # print publisher.send_message(message, queue='IaasService', reply_queue='iaas-callback')
+    publisher.send_request(message, queue='cd_service')

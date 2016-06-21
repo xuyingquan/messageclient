@@ -408,34 +408,22 @@ class Publisher(threading.Thread):
     """ 消息生产者基类
 
     """
-    def __init__(self, conf, queue, exchange=None, exchange_type='topic', binding_key=None):
+    def __init__(self, conf, exchange='devops', exchange_type='topic'):
         """ 构造函数
-        :param conf: ConfigOpts, 配置文件对象
-        :param queue: str, 连接队列名称
+        :param conf: ConfigOpts, 配置文件对象, 用于连接RabbitMQ
         :param exchange: str, 交换机名称
         :param exchange_type: str, 交换机类型
-        :param binding_key: str, 交换机和队列绑定的 binding_key
 
         """
         super(Publisher, self).__init__()
-        self.conf = conf
 
-        # 如果没有指定交换机，默认创建和队列名称相同的交换机
-        self.exchange = queue if exchange is None else exchange
-        self.exchange_type = exchange_type
-        self.queue = queue
+        self.conf = conf                        # 配置文件对象
+        self.exchange = exchange                # 交换机名称
+        self.exchange_type = exchange_type      # 交换机类型，可选择fanout, direct, topic
 
-        # 指定消息的routing_key和交换机队列的binding_key相同
-        if binding_key:
-            self.routing_key = binding_key
-        elif exchange and queue:
-            # 如果没有指定binding_key,将routing_key设置成exchange-queue
-            self.routing_key = '%s-%s' % (exchange, queue)
-        else:
-            # 如果没有指定exchange和binding_key，将routing_key设置成与队列同名
-            self.routing_key = queue
-        self._connection = None
-        self._channel = None
+        self._connection = None                 # 连接对象
+        self._channel = None                    # 通道对象
+
         self._deliveries = []
         self._acked = 0
         self._nacked = 0
@@ -548,28 +536,9 @@ class Publisher(threading.Thread):
 
         """
         LOG.info('Exchange declared')
-        self.setup_queue(self.queue)
+        # self.setup_queue(self.queue)
 
-    def setup_queue(self, queue_name):
-        """ 创建队列，向RabbitMQ发送Queue.Declare命令
-
-        """
-        LOG.info('Declaring queue %s' % queue_name)
-        self._channel.queue_declare(self.on_queue_declareok, queue_name, durable=True)
-
-    def on_queue_declareok(self, method_frame):
-        """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
-
-        """
-        LOG.info('Binding %s to %s with %s' % (self.exchange, self.queue, self.routing_key))
-        self._channel.queue_bind(self.on_bindok, self.queue, self.exchange, self.routing_key)
-
-    def on_bindok(self, method_frame):
-        """ 交换机和队列绑定成功响应函数
-
-        """
-        LOG.info('Queue bound')
-        self.start_publishing()
+        self.start_publishing()         # 开始准备发送消息
 
     def start_publishing(self):
         """ 开始准备发送消息，开启确认消息机制
@@ -600,18 +569,18 @@ class Publisher(threading.Thread):
         LOG.info('Published %i messages, %i have yet to be confirmed, %i were acked and %i were nacked'
                  % (self._message_number, len(self._deliveries), self._acked, self._nacked))
 
-    def publish_message(self, message, routing_key=None):
-        """ 发送消息到self.queue队列
+    def publish_message(self, message, queue=None):
+        """ 发送消息到queue指定队列
         :param message: messageclient.Message, 消息对象
-        :param routing_key: str, 消息的路由关键字,匹配binding_key
+        :param queue: str, 消息的路由关键字,匹配binding_key
         :return:
 
         """
-        routing_key = self.routing_key if routing_key is None else routing_key
+        routing_key = queue
         if self._stopping:
             return
-        while not self._channel:
-            time.sleep(1)
+        while not self._channel.is_open:
+            time.sleep(0.02)
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
         self._channel.basic_publish(self.exchange,
                                     routing_key,
@@ -620,6 +589,29 @@ class Publisher(threading.Thread):
         self._message_number += 1
         self._deliveries.append(self._message_number)
         LOG.info('Published message # %i' % self._message_number)
+
+    def broadcast_message(self, message, queues=[]):
+        """ 广播消息
+
+        """
+        routing_key = None
+        if queues:
+            routing_key = '.'.join(queues)
+
+        if self._stopping:
+            return
+        while not self._channel.is_open:
+            time.sleep(0.02)
+
+        properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
+        self._channel.basic_publish(self.exchange,
+                                    routing_key,
+                                    json.dumps(message.data, ensure_ascii=False),
+                                    properties)
+
+        self._message_number += 1
+        self._deliveries.append(self._message_number)
+        LOG.info('broadcast message # %i' % self._message_number)
 
     def close_channel(self):
         """ 主动关闭连接通道，发送Channel.Close命令给RabbitMQ
@@ -658,32 +650,39 @@ class Publisher(threading.Thread):
 
 
 class RpcPublisher(Publisher):
-    def __init__(self, conf, queue, reply_queue):
+    def __init__(self, conf, exchange='devops', exchange_type='topic'):
         """ 构造函数
         :param conf: ConfigOpts, 配置文件对象
-        :param queue: str, 队列名称
-        :param reply_queue: str, 返回结果队列名称
+        :param exchange: str, 交换机名称
+        :param exchange_type: str, 交换机类型
 
         """
-        super(RpcPublisher, self).__init__(conf, queue)
+        super(RpcPublisher, self).__init__(conf, exchange=exchange, exchange_type=exchange_type)
 
-        self.reply_queue = reply_queue          # 返回结果队列名称
         self._consumer_tag = None               # 返回队列消费者ID
         self.response = None                    # 响应结果对象
         self.correlation_id = None              # 消息关联ID
-        self.declare_queue(reply_queue)
+
+        self.reply_queues = set()               # 消息队列集合
+        self.reply_queue = None
 
     def __del__(self):
         """ 析构函数
 
         """
-        self._channel.queue_delete(queue=self.reply_queue)
+        for queue in self.reply_queues:
+            if self._channel.is_open:
+                self._channel.queue_delete(queue=queue)
 
     def declare_queue(self, queue_name):
         """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOG.info('Declaring queue %s' % queue_name)
+
+        self.reply_queue = queue_name
+        self.reply_queues.add(queue_name)
+
         while not self._channel.is_open:
             time.sleep(0.02)
         self._channel.queue_declare(self.on_queue_declared, queue_name, durable=True)
@@ -692,8 +691,11 @@ class RpcPublisher(Publisher):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
 
         """
-        LOG.info('Binding %s to %s with %s' % (self.exchange, self.reply_queue, self.reply_queue))
-        self._channel.queue_bind(self.on_rpc_bindok, self.reply_queue, self.exchange, self.reply_queue)
+        binding_key = None
+        if self.reply_queue is not None:
+            binding_key = '#.%s.#' % self.reply_queue
+        LOG.info('Binding %s to %s with %s' % (self.exchange, self.reply_queue, binding_key))
+        self._channel.queue_bind(self.on_rpc_bindok, self.reply_queue, self.exchange, binding_key)
 
     def on_rpc_bindok(self, unused_frame):
         """ 交换机和队列绑定成功响应函数
@@ -730,32 +732,91 @@ class RpcPublisher(Publisher):
 
         """
         if props.correlation_id == self.correlation_id:
-            self.response = json.loads(body)
+            message = json.loads(body)
+            self.response = message['body']
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
-    def publish_message(self, message, routing_key=None):
-        routing_key = self.routing_key if routing_key is None else routing_key
+    def send_message(self, message, queue=None, reply_queue=None):
+        """ 阻塞发送消息，等待返回结果
+        :param message: messageclient.Message, 消息对象
+        :param queue: str, 发送队列名称
+        :param reply_queue: str, 响应结果队列名称
+        :return: dict, 消息响应结果
+
+        """
+        if queue is None:
+            return
+        routing_key = queue         # 将消息发送给指定的队列
+
+        if reply_queue is None:
+            reply_queue = '%s-callback' % queue
+
         if self._stopping:
             return
+
+        # 循环等待通道处于打开状态
         while not self._channel:
-            time.sleep(0.2)
+            time.sleep(0.02)
+
+        # 创建回调队列
+        self.declare_queue(reply_queue)
+
         self.response = None
         self.correlation_id = str(uuid.uuid4())
         properties = pika.BasicProperties(app_id=None,
-                                          reply_to=self.reply_queue,
+                                          reply_to=reply_queue,
                                           correlation_id=self.correlation_id,
                                           content_type='application/json',
                                           headers=None)
+        # 发送消息
         self._channel.basic_publish(self.exchange,
                                     routing_key,
-                                    json.dumps(message, ensure_ascii=False),
+                                    json.dumps(message.data, ensure_ascii=False),
                                     properties)
         self._message_number += 1
         self._deliveries.append(self._message_number)
-        LOG.info('Published message # %i' % self._message_number)
+        LOG.info('send message # %i' % self._message_number)
 
-    def send_message(self, message):
-        self.publish_message(message)
+        # 等待消息响应结果
         while self.response is None:
-            time.sleep(0.2)
+            time.sleep(0.02)
         return self.response
+
+    def send_request(self, message, queue=None, reply_queue=None):
+        """ 异步发送消息
+        :param queue: str, 队列名称
+        :param reply_queue: str, 响应队列名称
+        :return: None
+
+        """
+        if queue is None:
+            return
+        routing_key = queue  # 将消息发送给指定的队列
+
+        if self._stopping:
+            return
+
+        # 循环等待通道处于打开状态
+        while not self._channel:
+            time.sleep(0.02)
+
+        if reply_queue is None:
+            reply_queue = ''
+        else:
+            self.declare_queue(reply_queue)     # 创建回调队列
+
+        self.response = None
+        self.correlation_id = str(uuid.uuid4())
+        properties = pika.BasicProperties(app_id=None,
+                                          reply_to=reply_queue,
+                                          correlation_id=self.correlation_id,
+                                          content_type='application/json',
+                                          headers=None)
+        # 发送消息
+        self._channel.basic_publish(self.exchange,
+                                    routing_key,
+                                    json.dumps(message.data, ensure_ascii=False),
+                                    properties)
+        self._message_number += 1
+        self._deliveries.append(self._message_number)
+        LOG.info('send request # %i' % self._message_number)
