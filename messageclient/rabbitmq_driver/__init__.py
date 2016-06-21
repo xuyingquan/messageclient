@@ -95,6 +95,8 @@ class Consumer(threading.Thread):
         """ 析构函数，释放通道和连接
 
         """
+        self._channel.queue_delete(queue=self.queue)
+        self._channel.exchange_delete(self.exchange)
         self.close_channel()
         self.close_connection()
 
@@ -574,11 +576,17 @@ class Publisher(threading.Thread):
         self.start_publishing()
 
     def start_publishing(self):
+        """ 开始准备发送消息，开启确认消息机制
+
+        """
         LOG.info('Issuing consumer related RPC commands')
         self.enable_delivery_confirmations()
         # self.schedule_next_message()
 
     def enable_delivery_confirmations(self):
+        """ 启用消息确认机制
+
+        """
         LOG.info('Issuing Confirm.Select RPC command')
         self._channel.confirm_delivery(self.on_delivery_confirmation)
 
@@ -597,6 +605,12 @@ class Publisher(threading.Thread):
                  % (self._message_number, len(self._deliveries), self._acked, self._nacked))
 
     def publish_message(self, message, routing_key=None):
+        """ 发送消息到self.queue队列
+        :param message: messageclient.Message, 消息对象
+        :param routing_key: str, 消息的路由关键字,匹配binding_key
+        :return:
+
+        """
         routing_key = self.routing_key if routing_key is None else routing_key
         if self._stopping:
             return
@@ -605,7 +619,7 @@ class Publisher(threading.Thread):
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
         self._channel.basic_publish(self.exchange,
                                     routing_key,
-                                    json.dumps(message, ensure_ascii=False),
+                                    json.dumps(message.data, ensure_ascii=False),
                                     properties)
         self._message_number += 1
         self._deliveries.append(self._message_number)
@@ -647,75 +661,67 @@ class Publisher(threading.Thread):
         self._connection.close()
 
 
-class RpcConsumer(Consumer):
-    def __init__(self, conf, queue):
-        super(RpcConsumer, self).__init__(conf, queue)
-
-    def __del__(self):
-        self._channel.queue_delete(queue=self.queue)
-        self._channel.exchange_delete(self.exchange)
-
-    def on_message(self, channel, method, props, body):
-        message = json.loads(body)
-        result = self.handle_message(message)
-        self.acknowledge_message(delivery_tag=method.delivery_tag)
-        channel.basic_publish(exchange=self.exchange,
-                              routing_key=props.reply_to,
-                              properties=pika.BasicProperties(correlation_id=props.correlation_id),
-                              body=json.dumps(result))
-
-
 class RpcPublisher(Publisher):
-    def __init__(self, conf, queue, callback_queue):
+    def __init__(self, conf, queue, reply_queue):
+        """ 构造函数
+        :param conf: ConfigOpts, 配置文件对象
+        :param queue: str, 队列名称
+        :param reply_queue: str, 返回结果队列名称
+
+        """
         super(RpcPublisher, self).__init__(conf, queue)
-        self.callback_queue = callback_queue
-        self._consumer_tag = None
-        self.response = None
-        self.correlation_id = None
-        self.setup_queue_rpc(callback_queue)
+
+        self.reply_queue = reply_queue          # 返回结果队列名称
+        self._consumer_tag = None               # 返回队列消费者ID
+        self.response = None                    # 响应结果对象
+        self.correlation_id = None              # 消息关联ID
+        self.declare_queue(reply_queue)
 
     def __del__(self):
-        self._channel.queue_delete(queue=self.callback_queue)
+        """ 析构函数
 
-    def setup_queue_rpc(self, queue_name):
+        """
+        self._channel.queue_delete(queue=self.reply_queue)
+
+    def declare_queue(self, queue_name):
         """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOG.info('Declaring queue %s' % queue_name)
-        while not self._channel:
-            time.sleep(1)
-        self._channel.queue_declare(self.on_queue_declareok_rpc, queue_name, durable=True)
+        while not self._channel.is_open:
+            time.sleep(0.02)
+        self._channel.queue_declare(self.on_queue_declared, queue_name, durable=True)
 
-    def on_queue_declareok_rpc(self, method_frame):
+    def on_queue_declared(self, method_frame):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
 
         """
-        LOG.info('Binding %s to %s with %s' % (self.exchange, self.callback_queue, self.callback_queue))
-        self._channel.queue_bind(self.on_bindok_rpc, self.callback_queue, self.exchange, self.callback_queue)
+        LOG.info('Binding %s to %s with %s' % (self.exchange, self.reply_queue, self.reply_queue))
+        self._channel.queue_bind(self.on_rpc_bindok, self.reply_queue, self.exchange, self.reply_queue)
 
-    def on_bindok_rpc(self, unused_frame):
+    def on_rpc_bindok(self, unused_frame):
         """ 交换机和队列绑定成功响应函数
 
         """
         LOG.info('Queue bound')
-        self.start_consuming_rpc()
+        self.start_rpc_consuming()
 
-    def start_consuming_rpc(self):
+    def start_rpc_consuming(self):
         """ 准备消费消息
 
         """
         LOG.info('Issuing consumer related RPC commands')
-        self.add_on_cancel_callback_rpc()
-        self._consumer_tag = self._channel.basic_consume(self.on_message, self.callback_queue)
+        self.add_on_rpc_cancel_callback()
+        self._consumer_tag = self._channel.basic_consume(self.on_message, self.reply_queue)
 
-    def add_on_cancel_callback_rpc(self):
+    def add_on_rpc_cancel_callback(self):
         """ 注册注销消费者响应函数
 
         """
         LOG.info('Adding consumer cancellation callback')
-        self._channel.add_on_cancel_callback(self.on_consumer_cancelled_rpc)
+        self._channel.add_on_cancel_callback(self.on_rpc_consumer_cancelled)
 
-    def on_consumer_cancelled_rpc(self, method_frame):
+    def on_rpc_consumer_cancelled(self, method_frame):
         """ 注销消费者响应函数
 
         """
@@ -740,7 +746,7 @@ class RpcPublisher(Publisher):
         self.response = None
         self.correlation_id = str(uuid.uuid4())
         properties = pika.BasicProperties(app_id=None,
-                                          reply_to=self.callback_queue,
+                                          reply_to=self.reply_queue,
                                           correlation_id=self.correlation_id,
                                           content_type='application/json',
                                           headers=None)
