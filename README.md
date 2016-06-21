@@ -26,11 +26,11 @@
     conf.register_opts(rabbit_opts)
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
 
-    class TestConsumer(messageclient.Consumer):
+    class DevopsConsumer(messageclient.Consumer):
         def __init__(self, conf, queue):
-            super(TestConsumer, self).__init__(conf, queue)
+            super(DevopsConsumer, self).__init__(conf, queue)
         
-        @messageclient.on_message_v1(type='test')
+        @messageclient.on_message_v1(type='cd_service')
         def handle_message_test(self, message):
             """ 处理test类型的消息
             
@@ -38,7 +38,7 @@
             print 'Receive Message: %s' % message
             return dict(result='ok')
            
-        @messageclient.on_message_v1(type='iaas')
+        @messageclient.on_message_v1(type='iaas_service')
         def handle_message_iaas(self, message):
             """ 处理iaas类型的消息
             
@@ -47,7 +47,9 @@
             return dict(result='ok')
 
     if __name__ == '__main__':
-        consumer = TestConsumer(conf, 'rpc')
+        consumer1 = DevopsConsumer(conf, 'iaas_service')
+        consumer2 = DevopsConsumer(conf, 'cd_service')
+        consumer3 = DevopsConsumer(conf, 'biz_service')
 
 ### 客户端实现
     from messageclient import RpcPublisher
@@ -67,9 +69,20 @@
     conf(project='iaas')  # load config file /etc/iaas/iaas.conf
         
     if __name__ == '__main__':
-        rpc = RpcPublisher(conf, 'rpc', 'rpc-callback-1')
-        result = rpc.send_message({'hello': 'world'})
+        publisher = RpcPublisher(conf)       # 全局对象
+        
+        # 用户产生的消息对象
+        message = messageclient.Message(header={'type': 'iaas_service'}, body={'hello': 'world'})
+        
+        # 同步发送消息，等待返回结果
+        result = publisher.send_message(message, queue='iaas_service', reply_queue='reply-iaas_service')
         print result
+        
+        # 异步发送消息，函数立即返回
+        publisher.send_request(message, queue='iaas_service')
+        
+        # 广播消息
+        publisher.broadcast_message(message, queues=['iaas_service', 'cd_service', 'biz_service'])
             
             
             
