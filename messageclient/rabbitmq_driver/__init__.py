@@ -664,6 +664,7 @@ class RpcPublisher(Publisher):
         self.correlation_id = None              # 消息关联ID
 
         self.reply_queues = set()               # 消息队列集合
+        self.lock = threading.Lock()            # 保护self.reply_queue
         self.reply_queue = None
 
     def __del__(self):
@@ -680,6 +681,7 @@ class RpcPublisher(Publisher):
         """
         LOG.info('Declaring queue %s' % queue_name)
 
+        self.lock.acquire()                 # 获取锁访问self.reply_queue
         self.reply_queue = queue_name
         self.reply_queues.add(queue_name)
 
@@ -711,6 +713,7 @@ class RpcPublisher(Publisher):
         LOG.info('Issuing consumer related RPC commands')
         self.add_on_rpc_cancel_callback()
         self._consumer_tag = self._channel.basic_consume(self.on_message, self.reply_queue)
+        self.lock.release()                 # 释放锁唤醒其他等待线程访问
 
     def add_on_rpc_cancel_callback(self):
         """ 注册注销消费者响应函数
