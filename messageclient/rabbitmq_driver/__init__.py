@@ -681,12 +681,13 @@ class RpcPublisher(Publisher):
         """
         LOG.info('Declaring queue %s' % queue_name)
 
-        self.lock.acquire()                 # 获取锁访问self.reply_queue
         self.reply_queue = queue_name
         self.reply_queues.add(queue_name)
 
         while not self._channel.is_open:
             time.sleep(0.02)
+
+        # 创建回调队列
         self._channel.queue_declare(self.on_queue_declared, queue_name, durable=True)
 
     def on_queue_declared(self, method_frame):
@@ -697,6 +698,8 @@ class RpcPublisher(Publisher):
         if self.reply_queue is not None:
             binding_key = '#.%s.#' % self.reply_queue
         LOG.info('Binding %s to %s with %s' % (self.exchange, self.reply_queue, binding_key))
+
+        # 绑定队列和交换机
         self._channel.queue_bind(self.on_rpc_bindok, self.reply_queue, self.exchange, binding_key)
 
     def on_rpc_bindok(self, unused_frame):
@@ -712,8 +715,9 @@ class RpcPublisher(Publisher):
         """
         LOG.info('Issuing consumer related RPC commands')
         self.add_on_rpc_cancel_callback()
+
+        # 注册回调队列消息响应函数
         self._consumer_tag = self._channel.basic_consume(self.on_message, self.reply_queue)
-        self.lock.release()                 # 释放锁唤醒其他等待线程访问
 
     def add_on_rpc_cancel_callback(self):
         """ 注册注销消费者响应函数
@@ -747,6 +751,8 @@ class RpcPublisher(Publisher):
         :return: dict, 消息响应结果
 
         """
+        self.lock.acquire()         # 获取锁访问self.reply_queue
+
         if queue is None:
             return
         routing_key = queue         # 将消息发送给指定的队列
@@ -761,7 +767,7 @@ class RpcPublisher(Publisher):
         while not self._channel:
             time.sleep(0.02)
 
-        # 创建回调队列
+        # 创建回调队列，注册回调队列响应函数以及消费队列
         self.declare_queue(reply_queue)
 
         self.response = None
@@ -783,7 +789,9 @@ class RpcPublisher(Publisher):
         # 等待消息响应结果
         while self.response is None:
             time.sleep(0.02)
-        return self.response
+        result = self.response
+        self.lock.release()  # 释放锁唤醒其他等待线程访问
+        return result
 
     def send_request(self, message, queue=None, reply_queue=None):
         """ 异步发送消息

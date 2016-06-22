@@ -65,5 +65,5 @@ if __name__ == '__main__':
     message = messageclient.Message(header={'type': 'test'}, body=msg_body)
     result = publisher.send_message(message, queue='IaasService', reply_queue='iaas-reply-1')
     print result
-    # print publisher.send_message(message, queue='IaasService', reply_queue='iaas-callback')
-    publisher.send_request(message, queue='cd_service')
+    print publisher.send_message(message, queue='IaasService', reply_queue='iaas-callback')
+    #publisher.send_request(message, queue='cd_service')
