@@ -577,10 +577,13 @@ class Publisher(threading.Thread):
 
         """
         routing_key = queue
+
         if self._stopping:
             return
-        while not self._channel.is_open:
+
+        while not (self._channel and self._channel.is_open):
             time.sleep(0.02)
+
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
         self._channel.basic_publish(self.exchange,
                                     routing_key,
@@ -600,7 +603,8 @@ class Publisher(threading.Thread):
 
         if self._stopping:
             return
-        while not self._channel.is_open:
+
+        while not (self._channel and self._channel.is_open):
             time.sleep(0.02)
 
         properties = pika.BasicProperties(app_id=None, content_type='application/json', headers=None)
@@ -764,7 +768,7 @@ class RpcPublisher(Publisher):
             return
 
         # 循环等待通道处于打开状态
-        while not self._channel:
+        while not (self._channel and self._channel.is_open):
             time.sleep(0.02)
 
         # 创建回调队列，注册回调队列响应函数以及消费队列
@@ -808,7 +812,7 @@ class RpcPublisher(Publisher):
             return
 
         # 循环等待通道处于打开状态
-        while not self._channel:
+        while not (self._channel and self._channel.is_open):
             time.sleep(0.02)
 
         if reply_queue is None:

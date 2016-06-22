@@ -37,8 +37,8 @@ class TestConsumer(messageclient.Consumer):
         return result
 
 
-consumer = TestConsumer(CONF, 'IaasService')
-
-#consumer2 = TestConsumer(CONF, 'cd_service')
+consumer1 = TestConsumer(CONF, 'iaas_service')
+consumer2 = TestConsumer(CONF, 'cd_service')
+consumer3 = TestConsumer(CONF, 'biz_service')
 
 
