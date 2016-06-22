@@ -32,7 +32,7 @@
         
         @messageclient.on_message_v1(type='cd_service')
         def handle_message_test(self, message):
-            """ 处理test类型的消息
+            """ 处理cd_service类型的消息
             
             """
             print 'Receive Message: %s' % message
@@ -40,7 +40,15 @@
            
         @messageclient.on_message_v1(type='iaas_service')
         def handle_message_iaas(self, message):
-            """ 处理iaas类型的消息
+            """ 处理iaas_service类型的消息
+            
+            """
+            print 'Receive Message: %s' % message
+            return dict(ip='192.168.1.10', user='cloud', paasword='123456')
+        
+        @messageclient.on_message_v1(type='biz_service')
+        def handle_message_iaas(self, message):
+            """ 处理biz_service类型的消息
             
             """
             print 'Receive Message: %s' % message
