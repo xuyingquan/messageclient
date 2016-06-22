@@ -818,7 +818,10 @@ class RpcPublisher(Publisher):
         if reply_queue is None:
             reply_queue = ''
         else:
-            self.declare_queue(reply_queue)     # 创建回调队列
+            # self.declare_queue(reply_queue)     # 创建回调队列
+            self._channel.queue_declare(None, reply_queue, nowait=True, durable=True)
+            binding_key = '#.%s.#' % self.reply_queue
+            self._channel.queue_bind(None, self.reply_queue, self.exchange, binding_key, nowait=True)
 
         self.response = None
         self.correlation_id = str(uuid.uuid4())

@@ -36,9 +36,14 @@ class TestConsumer(messageclient.Consumer):
         result = {'ip': '172.30.40.201', 'user': 'cloud', 'password': '123456'}
         return result
 
+    @messageclient.on_message_v1(type='iaas_service')
+    def handle_message(self, message):
+        print 'receive response: %s' % message
+        return dict(ip='192.168.1.10', user='cloud', password='123456')
+
 
 consumer1 = TestConsumer(CONF, 'iaas_service')
-consumer2 = TestConsumer(CONF, 'cd_service')
-consumer3 = TestConsumer(CONF, 'biz_service')
+# consumer2 = TestConsumer(CONF, 'cd_service')
+# consumer3 = TestConsumer(CONF, 'biz_service')
 
 

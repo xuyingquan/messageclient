@@ -78,11 +78,15 @@
         result = publisher.send_message(message, queue='iaas_service', reply_queue='reply-iaas_service')
         print result
         
-        # 异步发送消息，函数立即返回
+        # 异步发送消息，函数立即返回，单纯发送消息，没有返回结果
         publisher.send_request(message, queue='iaas_service')
         
         # 广播消息
         publisher.broadcast_message(message, queues=['iaas_service', 'cd_service', 'biz_service'])
+        
+        # 异步发送消息，函数立即返回，有返回结果
+        publisher.send_request(message, queue='iaas_service', reply_queue='reply-iaas_service')
+        DevopsConsumer(conf, queue='reply-iaas_service')    # 处理消息返回结果
             
             
             

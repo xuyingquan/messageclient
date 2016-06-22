@@ -57,14 +57,28 @@ def main():
     print result
 
 
+class TestConsumer(messageclient.Consumer):
+    def __init__(self, conf, queue):
+        super(TestConsumer, self).__init__(conf, queue)
+
+    @messageclient.on_message_v1(type='iaas_service')
+    def handle_message(self, message):
+        print 'receive response: %s' % message
+        return dict(ip='192.168.1.10', user='cloud', password='123456')
+
+
 if __name__ == '__main__':
     test_method = 'sync'
     # main()
     from messageclient import RpcPublisher
     publisher = RpcPublisher(CONF)
-    message = messageclient.Message(header={'type': 'test'}, body=msg_body)
+    message = messageclient.Message(header={'type': 'iaas_service'}, body=msg_body)
     # print publisher.send_message(message, queue='iaas_service', reply_queue='reply-iaas_service')
     # print publisher.send_message(message, queue='cd_service', reply_queue='reply-cd_service')
     # print publisher.send_message(message, queue='biz_service', reply_queue='reply-biz_service')
-    publisher.broadcast_message(message, queues=['cd_service', 'iaas_service', 'biz_service'])
-    publisher.join(timeout=5)
+    # publisher.broadcast_message(message, queues=['cd_service', 'iaas_service', 'biz_service'])
+
+    publisher.send_request(message, queue='iaas_service', reply_queue='reply-iaas_service')
+
+    TestConsumer(CONF, 'reply-iaas_service')
+
