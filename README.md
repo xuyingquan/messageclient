@@ -31,7 +31,7 @@
             super(DevopsConsumer, self).__init__(conf, queue)
         
         @messageclient.on_message_v1(type='cd_service')
-        def handle_message_test(self, message):
+        def handle_message_cd(self, message):
             """ 处理cd_service类型的消息
             
             """
@@ -47,7 +47,7 @@
             return dict(ip='192.168.1.10', user='cloud', paasword='123456')
         
         @messageclient.on_message_v1(type='biz_service')
-        def handle_message_iaas(self, message):
+        def handle_message_biz(self, message):
             """ 处理biz_service类型的消息
             
             """
