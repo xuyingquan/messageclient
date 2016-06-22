@@ -157,7 +157,7 @@ class Consumer(threading.Thread):
         if auto_make:
             self._connection.channel(on_open_callback=self.on_channel_open)
         else:
-            while not self._connection:
+            while not (self._connection and self._connection.is_open):
                 time.sleep(0.02)
             return self._connection.channel(on_open_callback=self.on_all_method)
 
@@ -201,7 +201,7 @@ class Consumer(threading.Thread):
                                      durable=True)
         # 此方法由用户主动调用创建交换机
         else:
-            while not channel.is_open:
+            while not (channel and channel.is_open):
                 time.sleep(0.02)
             channel.exchange_declare(callback=self.on_all_method,
                                      exchange=exchange_name,
@@ -237,7 +237,7 @@ class Consumer(threading.Thread):
 
         # 此方法由用户主动调用创建队列
         else:
-            while not channel.is_open:
+            while not (channel and channel.is_open):
                 time.sleep(0.02)
             channel.queue_declare(self.on_all_method, queue_name, nowait=False, durable=True)
 
@@ -256,7 +256,7 @@ class Consumer(threading.Thread):
             channel = self._channel
         LOGGER.info('Binding %s to %s with %s' % (exchange, queue, binding_key))
 
-        while not channel.is_open:
+        while not (channel and channel.is_open):
             time.sleep(0.02)
         channel.queue_bind(self.on_all_method, queue, exchange, binding_key, nowait=True)
 
@@ -283,7 +283,7 @@ class Consumer(threading.Thread):
         LOGGER.info('Issuing consumer related RPC commands')
         self.add_on_cancel_callback(channel)
 
-        while not channel.is_open:
+        while not (channel and channel.is_open):
             time.sleep(0.02)
         self._consumer_tag = channel.basic_consume(callback, queue)
 
