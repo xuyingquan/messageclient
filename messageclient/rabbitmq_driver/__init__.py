@@ -92,7 +92,7 @@ class Consumer(threading.Thread):
 
         """
         self._channel.queue_delete(queue=self.queue)
-        self._channel.exchange_delete(self.exchange)
+        # self._channel.exchange_delete(self.exchange)
         self.close_channel()
         self.close_connection()
 
