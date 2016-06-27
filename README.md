@@ -55,9 +55,9 @@
             return dict(result='ok')
 
     if __name__ == '__main__':
-        consumer1 = DevopsConsumer(conf, 'iaas_service')
-        consumer2 = DevopsConsumer(conf, 'cd_service')
-        consumer3 = DevopsConsumer(conf, 'biz_service')
+        consumer1 = DevopsConsumer(conf, queue='iaas_service')
+        consumer2 = DevopsConsumer(conf, queue='cd_service')
+        consumer3 = DevopsConsumer(conf, queue='biz_service')
 
 ### 客户端实现
     from messageclient import RpcPublisher
@@ -124,7 +124,7 @@
     
     transport = messageclient.get_transport(conf)
     target = messageclient.Target(queue='IaasService')
-    messageclient.start_consume_message(transport, target)
+    transport.start_consume_message(target)
 
 
 ### 异步消息发送处理 (客户端)

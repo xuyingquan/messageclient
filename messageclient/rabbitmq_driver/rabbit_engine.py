@@ -208,6 +208,12 @@ class Transport(object):
         """
         return self.notify(message)
 
+    def start_consume_message(self, target):
+        """ 开始消费消息
+
+        """
+        messageclient.start_consume_message(target)
+
 
 def get_transport(conf):
     """
