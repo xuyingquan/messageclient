@@ -199,7 +199,7 @@ def consume_callback_message(transport, target, reply_queue=None):
     LOG.info('waiting callback response...')
 
     # 接收处理消息
-    response_result_lock.acquire()
+    response_result_lock.acquire()          # 获取response_result锁
 
     global receive_response_flag
     receive_response_flag = False
@@ -208,7 +208,7 @@ def consume_callback_message(transport, target, reply_queue=None):
         time.sleep(0.02)
     receive_response_flag = False
 
-    response_result_lock.release()
+    response_result_lock.release()          # 释放response_result锁
 
     """
     try:
