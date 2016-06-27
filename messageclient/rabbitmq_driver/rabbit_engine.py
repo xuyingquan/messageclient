@@ -190,11 +190,11 @@ class Transport(object):
                                    properties=properties,
                                    body=json.dumps(message.data))
 
-    def receive_response(self, target):
+    def receive_response(self, target, reply_queue=None):
         """ 异步接收回调队列消息
 
         """
-        messageclient.receive_response(self, target)
+        messageclient.receive_response(self, target, reply_queue)
 
     def send_message(self, target, message, callback_queue=None):
         """ 阻塞发送消息，返回消息响应结果

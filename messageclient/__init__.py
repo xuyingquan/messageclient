@@ -24,7 +24,7 @@ from messageclient.rabbitmq_driver import on_message_v1
 
 
 message_handler = dict()                        # 消息处理函数（用户定义）字典
-response_result_handled = False                 # 消息响应结果
+receive_response_flag = False                    # 消息响应结果处理标志
 response_result_lock = threading.Lock()         # 保护消息响应结果
 
 __all__ = [
@@ -160,9 +160,6 @@ def on_response_received(ch, method, props, msg):
     """ 接受消息响应函数， 此函数由pika调用； 根据消息的类型调用具体的消息响应函数
 
     """
-    response_result_lock.acquire()
-    global response_result_handled
-    response_result_handled = False
 
     try:
         msg = json.loads(msg)
@@ -178,17 +175,20 @@ def on_response_received(ch, method, props, msg):
     except:
         LOG.error(traceback.format_exc())
 
-    response_result_handled = True
-    response_result_lock.release()
+    global receive_response_flag
+    receive_response_flag = True
 
 
-def consume_callback_message(transport, target):
+def consume_callback_message(transport, target, reply_queue=None):
     """ 消费回调队列消息
 
     """
 
     # 创建回调队列
-    callback_queue = '%s-callback' % target.queue
+    if reply_queue is not None:
+        callback_queue = reply_queue
+    else:
+        callback_queue = '%s-callback' % target.queue
     transport.channel.queue_declare(queue=callback_queue, durable=True)
     if target.broadcast:
         transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
@@ -199,10 +199,16 @@ def consume_callback_message(transport, target):
     LOG.info('waiting callback response...')
 
     # 接收处理消息
-    global response_result_handled
-    while response_result_handled is False:
-        time.sleep(0.02)
+    response_result_lock.acquire()
+
+    global receive_response_flag
+    receive_response_flag = False
+    while receive_response_flag is False:
         transport.connection.process_data_events()
+        time.sleep(0.02)
+    receive_response_flag = False
+
+    response_result_lock.release()
 
     """
     try:
@@ -222,8 +228,8 @@ def send_request(message):
     message.transport.send_request(message.target, message)
 
 
-def receive_response(transport, target):
+def receive_response(transport, target, reply_queue=None):
     """ 接收异步消息返回结果
     """
-    threading.Thread(target=consume_callback_message, args=(transport, target)).start()
+    threading.Thread(target=consume_callback_message, args=(transport, target, reply_queue)).start()
 
