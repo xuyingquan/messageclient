@@ -12,6 +12,8 @@ import pika
 import json
 import traceback
 import threading
+import time
+
 LOG = util.init_logger('messageclient', '/var/log/messageclient.log')
 
 from messageclient.rabbitmq_driver.rabbit_engine import PikaEngine, Target, Transport
@@ -21,7 +23,9 @@ from messageclient.rabbitmq_driver import Consumer, Publisher, RpcPublisher
 from messageclient.rabbitmq_driver import on_message_v1
 
 
-message_handler = dict()            # 消息处理函数（用户定义）字典
+message_handler = dict()                        # 消息处理函数（用户定义）字典
+response_result_handled = False                 # 消息响应结果
+response_result_lock = threading.Lock()         # 保护消息响应结果
 
 __all__ = [
     "Target",
@@ -156,6 +160,10 @@ def on_response_received(ch, method, props, msg):
     """ 接受消息响应函数， 此函数由pika调用； 根据消息的类型调用具体的消息响应函数
 
     """
+    response_result_lock.acquire()
+    global response_result_handled
+    response_result_handled = False
+
     try:
         msg = json.loads(msg)
         msg_body = msg['body']                      # 获取消息体数据
@@ -170,11 +178,15 @@ def on_response_received(ch, method, props, msg):
     except:
         LOG.error(traceback.format_exc())
 
+    response_result_handled = True
+    response_result_lock.release()
+
 
 def consume_callback_message(transport, target):
     """ 消费回调队列消息
 
     """
+
     # 创建回调队列
     callback_queue = '%s-callback' % target.queue
     transport.channel.queue_declare(queue=callback_queue, durable=True)
@@ -187,12 +199,19 @@ def consume_callback_message(transport, target):
     LOG.info('waiting callback response...')
 
     # 接收处理消息
+    global response_result_handled
+    while response_result_handled is False:
+        time.sleep(0.02)
+        transport.connection.process_data_events()
+
+    """
     try:
         transport.channel.start_consuming()
     except:
         LOG.error(traceback.format_exc())
         transport.channel.stop_consuming()
     transport.connection.close()
+    """
 
 
 def send_request(message):
