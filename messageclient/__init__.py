@@ -125,10 +125,14 @@ def consume_message(transport, target, callback):
     """
     # daemonize()
 
+    transport.channel.exchange_declare(exchange='devops', exchange_type='topic', durable=True)
+
     # 创建消费队列
     transport.channel.queue_declare(queue=target.queue, durable=True)
     if target.broadcast:
         transport.channel.queue_bind(exchange='amq.fanout', queue=target.queue)
+
+    transport.channel.queue_bind(queue=target.queue, exchange='devops', routing_key='#.%s.#' % target.queue)
 
     # 设置队列预取消息
     transport.channel.basic_qos(prefetch_count=1)
