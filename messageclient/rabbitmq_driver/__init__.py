@@ -798,7 +798,7 @@ class RpcPublisher(Publisher):
             time.sleep(0.02)
         result = self.response
 
-        self._channel.basic_cancel(consumer_tag=self._consumer_tag, nowait=True)
+        # self._channel.basic_cancel(consumer_tag=self._consumer_tag, nowait=True)
         self.lock.release()  # 释放锁唤醒其他等待线程访问
         return result
 
