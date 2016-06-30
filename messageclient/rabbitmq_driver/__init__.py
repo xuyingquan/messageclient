@@ -693,8 +693,9 @@ class RpcPublisher(Publisher):
             time.sleep(0.02)
 
         # 创建回调队列
-        self._channel.queue_declare(self.on_queue_declared, queue_name, durable=durable,
-                                    exclusive=exclusive, auto_delete=auto_delete)
+        consumer_tag = self._channel.queue_declare(self.on_queue_declared, queue_name, durable=durable,
+                                                   exclusive=exclusive, auto_delete=auto_delete)
+        return consumer_tag
 
     def on_queue_declared(self, method_frame):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
@@ -774,7 +775,7 @@ class RpcPublisher(Publisher):
             time.sleep(0.02)
 
         # 创建回调队列，注册回调队列响应函数以及消费队列
-        self.declare_queue(reply_queue, exclusive=True, auto_delete=True, durable=False)
+        self._consumer_tag = self.declare_queue(reply_queue, exclusive=True, auto_delete=True, durable=False)
 
         self.response = None
         self.correlation_id = str(uuid.uuid4())
@@ -796,6 +797,8 @@ class RpcPublisher(Publisher):
         while self.response is None:
             time.sleep(0.02)
         result = self.response
+
+        self._channel.basic_cancel(consumer_tag=self._consumer_tag, nowait=True)
         self.lock.release()  # 释放锁唤醒其他等待线程访问
         return result
 
