@@ -212,7 +212,7 @@ class Transport(object):
         """ 开始消费消息
 
         """
-        messageclient.start_consume_message(target)
+        messageclient.start_consume_message(self, target)
 
 
 def get_transport(conf):
