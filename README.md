@@ -83,7 +83,7 @@
         message = messageclient.Message(header={'type': 'iaas_service'}, body={'hello': 'world'})
         
         # 同步发送消息，等待返回结果
-        result = publisher.send_message(message, queue='iaas_service', reply_queue='reply-iaas_service')
+        result = publisher.send_message(message, queue='iaas_service')
         print result
         
         # 异步发送消息，函数立即返回，单纯发送消息，没有返回结果

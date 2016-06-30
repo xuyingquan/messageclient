@@ -679,20 +679,22 @@ class RpcPublisher(Publisher):
             if self._channel.is_open:
                 self._channel.queue_delete(queue=queue)
 
-    def declare_queue(self, queue_name):
+    def declare_queue(self, queue_name, exclusive=False, auto_delete=False, durable=True):
         """ 创建队列，向RabbitMQ发送Queue.Declare命令
 
         """
         LOG.info('Declaring queue %s' % queue_name)
 
         self.reply_queue = queue_name
-        self.reply_queues.add(queue_name)
+        if durable:
+            self.reply_queues.add(queue_name)
 
         while not self._channel.is_open:
             time.sleep(0.02)
 
         # 创建回调队列
-        self._channel.queue_declare(self.on_queue_declared, queue_name, durable=True)
+        self._channel.queue_declare(self.on_queue_declared, queue_name, durable=durable,
+                                    exclusive=exclusive, auto_delete=auto_delete)
 
     def on_queue_declared(self, method_frame):
         """ 队列创建完成响应函数，接收RabbitMQ发送过来的Queue.DeclareOk命令
@@ -762,7 +764,7 @@ class RpcPublisher(Publisher):
         routing_key = queue         # 将消息发送给指定的队列
 
         if reply_queue is None:
-            reply_queue = '%s-callback' % queue
+            reply_queue = 'reply-%s' % str(uuid.uuid4())
 
         if self._stopping:
             return
@@ -772,7 +774,7 @@ class RpcPublisher(Publisher):
             time.sleep(0.02)
 
         # 创建回调队列，注册回调队列响应函数以及消费队列
-        self.declare_queue(reply_queue)
+        self.declare_queue(reply_queue, exclusive=True, auto_delete=True, durable=False)
 
         self.response = None
         self.correlation_id = str(uuid.uuid4())
