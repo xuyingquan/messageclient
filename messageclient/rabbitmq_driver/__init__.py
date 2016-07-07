@@ -100,7 +100,7 @@ class Consumer(threading.Thread):
         """ 连接RabbitMQ, 返回连接句柄. 当连接建立后，on_connection_open方法将会被调用
 
         """
-        LOGGER.info('Connecting to %s' % self.conf.mq_hosts)
+        LOGGER.info('Connecting to RabbitMQ %s' % self.conf.mq_hosts)
         connection_params = pika.ConnectionParameters(
             host=self.conf.mq_hosts,
             port=self.conf.mq_port,
@@ -116,7 +116,7 @@ class Consumer(threading.Thread):
         """ 连接建立成功后，该方法被调用； 注册连接关闭响应函数以及建立通道
 
         """
-        LOGGER.info('Connection opened')
+        # LOGGER.info('Connection opened')
         self.add_on_connection_close_callback()
         self.open_channel(auto_make=True)
 
@@ -124,7 +124,7 @@ class Consumer(threading.Thread):
         """ 注册连接关闭响应函数
 
         """
-        LOGGER.info('Adding connection close callback')
+        # LOGGER.info('Adding connection close callback')
         self._connection.add_on_close_callback(self.on_connection_closed)
 
     def on_connection_closed(self, connection, reply_code, reply_text):
@@ -153,7 +153,7 @@ class Consumer(threading.Thread):
         """ 建立连接通道，给RabbitMQ发送Channel.Open命令，当接收到Channel.Open.OK时表示通道已建立
 
         """
-        LOGGER.info('Creating a new channel')
+        LOGGER.info('Creating a new channel to RabbitMQ')
         if auto_make:
             self._connection.channel(on_open_callback=self.on_channel_open)
         else:
@@ -165,7 +165,7 @@ class Consumer(threading.Thread):
         """ 当收到Channel.Open.OK命令时，会调用该函数
 
         """
-        LOGGER.info('Channel opened')
+        # LOGGER.info('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
         self.setup_exchange(self.exchange, auto_make=True)
@@ -174,7 +174,7 @@ class Consumer(threading.Thread):
         """ 注册连接通道关闭响应函数
 
         """
-        LOGGER.info('Adding channel close callback')
+        # LOGGER.info('Adding channel close callback')
         self._channel.add_on_close_callback(self.on_channel_closed)
 
     def on_channel_closed(self, channel, reply_code, reply_text):
@@ -213,7 +213,7 @@ class Consumer(threading.Thread):
         """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
 
         """
-        LOGGER.info('Exchange declared')
+        # LOGGER.info('Exchange declared')
         self.setup_queue(self.queue, auto_make=True)
 
     def on_all_method(self, method_frame):
@@ -264,7 +264,7 @@ class Consumer(threading.Thread):
         """ 交换机和队列绑定成功响应函数
 
         """
-        LOGGER.info('Queue bound')
+        # LOGGER.info('Queue bound')
         self.start_consuming(callback=self.on_message)
 
     def start_consuming(self, channel=None, queue=None, callback=None):
@@ -280,7 +280,7 @@ class Consumer(threading.Thread):
         if queue is None:
             queue = self.queue
 
-        LOGGER.info('Issuing consumer related RPC commands')
+        LOGGER.info('Starting to receive message and handling...')
         self.add_on_cancel_callback(channel)
 
         while not (channel and channel.is_open):
@@ -291,7 +291,7 @@ class Consumer(threading.Thread):
         """ 注册注销消费者响应函数
 
         """
-        LOGGER.info('Adding consumer cancellation callback')
+        # LOGGER.info('Adding consumer cancellation callback')
         channel.add_on_cancel_callback(self.on_consumer_cancelled)
 
     def on_consumer_cancelled(self, method_frame, channel=None):
