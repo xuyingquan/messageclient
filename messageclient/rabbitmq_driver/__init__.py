@@ -330,8 +330,8 @@ class Consumer(threading.Thread):
             return_msg = dict()
             return_msg['header'] = message['header']
             return_msg['body'] = result
-            self.send_result(channel, props, return_msg)
             self.acknowledge_message(delivery_tag=method.delivery_tag, channel=channel)
+            self.send_result(channel, props, return_msg)
 
     def send_result(self, channel, props, result):
         """ 给发送端返回消息响应结果
@@ -340,8 +340,8 @@ class Consumer(threading.Thread):
         message_properties = pika.BasicProperties(correlation_id=props.correlation_id)
         callback_queue = props.reply_to
 
-        channel.queue_declare(None, queue=callback_queue, exclusive=False, auto_delete=True)
-        LOGGER.info('declaring queue %s' % callback_queue)
+        # channel.queue_declare(None, queue=callback_queue, exclusive=False, auto_delete=True)
+        # LOGGER.info('declaring queue %s' % callback_queue)
 
         # 返回处理结果
         channel.basic_publish(exchange='',
@@ -829,9 +829,10 @@ class RpcPublisher(Publisher):
             reply_queue = ''
         else:
             # self.declare_queue(reply_queue)     # 创建回调队列
-            self._channel.queue_declare(None, reply_queue, nowait=True, durable=True)
-            binding_key = '#.%s.#' % reply_queue
-            self._channel.queue_bind(None, reply_queue, self.exchange, binding_key, nowait=True)
+            # self._channel.queue_declare(None, reply_queue, nowait=True, durable=True)
+            # binding_key = '#.%s.#' % reply_queue
+            # self._channel.queue_bind(None, reply_queue, self.exchange, binding_key, nowait=True)
+            pass
 
         self.response = None
         self.correlation_id = str(uuid.uuid4())
