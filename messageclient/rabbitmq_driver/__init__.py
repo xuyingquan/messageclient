@@ -340,6 +340,8 @@ class Consumer(threading.Thread):
         message_properties = pika.BasicProperties(correlation_id=props.correlation_id)
         callback_queue = props.reply_to
 
+        channel.queue_declare(None, queue=callback_queue, exclusive=True, auto_delete=True)
+
         # 返回处理结果
         channel.basic_publish(exchange='',
                               routing_key=callback_queue,
@@ -443,7 +445,7 @@ class Publisher(threading.Thread):
         """ 连接RabbitMQ, 返回连接句柄. 当连接建立后，on_connection_open方法将会被调用
 
         """
-        LOG.info('Connecting to %s' % self.conf.mq_hosts)
+        LOG.info('Connecting to RabbitMQ %s' % self.conf.mq_hosts)
         connection_params = pika.ConnectionParameters(
             host=self.conf.mq_hosts,
             port=self.conf.mq_port,
@@ -459,7 +461,7 @@ class Publisher(threading.Thread):
         """ 连接建立成功后，该方法被调用； 注册连接关闭响应函数以及建立通道
 
         """
-        LOG.info('Connection opened')
+        # LOG.info('Connection to rabbimq opened')
         self.add_on_connection_close_callback()
         self.open_channel()
 
@@ -467,7 +469,7 @@ class Publisher(threading.Thread):
         """ 注册连接关闭响应函数
 
         """
-        LOG.info('Adding connection close callback')
+        # LOG.info('Adding connection close callback')
         self._connection.add_on_close_callback(self.on_connection_closed)
 
     def on_connection_closed(self, connection, reply_code, reply_text):
@@ -497,14 +499,14 @@ class Publisher(threading.Thread):
         """ 建立连接通道，给RabbitMQ发送Channel.Open命令，当接收到Channel.Open.OK时表示通道已建立
 
         """
-        LOG.info('Creating a new channel')
+        LOG.info('Creating a new channel to RabbitMQ.')
         self._connection.channel(on_open_callback=self.on_channel_open)
 
     def on_channel_open(self, channel):
         """ 当收到Channel.Open.OK命令时，会调用该函数
 
         """
-        LOG.info('Channel opened')
+        # LOG.info('Channel opened')
         self._channel = channel
         self.add_on_channel_close_callback()
         self.setup_exchange(self.exchange)
@@ -513,7 +515,7 @@ class Publisher(threading.Thread):
         """ 注册连接通道关闭响应函数
 
         """
-        LOG.info('Adding channel close callback')
+        # LOG.info('Adding channel close callback')
         self._channel.add_on_close_callback(self.on_channel_closed)
 
     def on_channel_closed(self, channel, reply_code, reply_text):
@@ -535,7 +537,7 @@ class Publisher(threading.Thread):
         """ 交换机创建成功响应函数, 会接收到Exchange.DeclareOk命令
 
         """
-        LOG.info('Exchange declared')
+        # LOG.info('Exchange declared')
         # self.setup_queue(self.queue)
 
         self.start_publishing()         # 开始准备发送消息
@@ -544,7 +546,7 @@ class Publisher(threading.Thread):
         """ 开始准备发送消息，开启确认消息机制
 
         """
-        LOG.info('Issuing consumer related RPC commands')
+        # LOG.info('Issuing consumer related RPC commands')
         self.enable_delivery_confirmations()
         # self.schedule_next_message()
 
@@ -552,7 +554,7 @@ class Publisher(threading.Thread):
         """ 启用消息确认机制
 
         """
-        LOG.info('Issuing Confirm.Select RPC command')
+        # LOG.info('Issuing Confirm.Select RPC command')
         self._channel.confirm_delivery(self.on_delivery_confirmation)
 
     def on_delivery_confirmation(self, method_frame):
@@ -566,8 +568,7 @@ class Publisher(threading.Thread):
         elif confirmation_type == 'nack':
             self._nacked += 1
         self._deliveries.remove(method_frame.method.delivery_tag)
-        LOG.info('Published %i messages, %i have yet to be confirmed, %i were acked and %i were nacked'
-                 % (self._message_number, len(self._deliveries), self._acked, self._nacked))
+        # LOG.info('Published %i messages, %i were acked' % (self._message_number, self._acked))
 
     def publish_message(self, message, queue=None):
         """ 发送消息到queue指定队列
@@ -669,7 +670,8 @@ class RpcPublisher(Publisher):
 
         self.reply_queues = set()               # 消息队列集合
         self.lock = threading.Lock()            # 保护self.reply_queue
-        self.reply_queue = None
+        self.reply_queue = None                 # 同步调用回调队列
+        self.reply_response = None               # 同步调用响应结果
 
     def __del__(self):
         """ 析构函数
@@ -695,6 +697,7 @@ class RpcPublisher(Publisher):
         # 创建回调队列
         consumer_tag = self._channel.queue_declare(self.on_queue_declared, queue_name, durable=durable,
                                                    exclusive=exclusive, auto_delete=auto_delete)
+
         return consumer_tag
 
     def on_queue_declared(self, method_frame):
@@ -713,14 +716,14 @@ class RpcPublisher(Publisher):
         """ 交换机和队列绑定成功响应函数
 
         """
-        LOG.info('Queue bound')
+        # LOG.info('Starting to receive response message...')
         self.start_rpc_consuming()
 
     def start_rpc_consuming(self):
         """ 准备消费消息
 
         """
-        LOG.info('Issuing consumer related RPC commands')
+        LOG.info('Starting to receive response message...')
         self.add_on_rpc_cancel_callback()
 
         # 注册回调队列消息响应函数
@@ -730,7 +733,7 @@ class RpcPublisher(Publisher):
         """ 注册注销消费者响应函数
 
         """
-        LOG.info('Adding consumer cancellation callback')
+        # LOG.info('Adding consumer cancellation callback')
         self._channel.add_on_cancel_callback(self.on_rpc_consumer_cancelled)
 
     def on_rpc_consumer_cancelled(self, method_frame):
@@ -739,7 +742,8 @@ class RpcPublisher(Publisher):
         """
         LOG.info('Consumer was cancelled remotely, shutting down: %r' % method_frame)
         if self._channel:
-            self._channel.close()
+            # self._channel.close()
+            pass
 
     def on_message(self, channel, method, props, body):
         """ 消息处理函数， 每当接收到一个完整消息后会调用该函数
@@ -747,7 +751,7 @@ class RpcPublisher(Publisher):
         """
         if props.correlation_id == self.correlation_id:
             message = json.loads(body)
-            self.response = message['body']
+            self.reply_response = message['body']
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
     def send_message(self, message, queue=None, reply_queue=None):
@@ -775,9 +779,9 @@ class RpcPublisher(Publisher):
             time.sleep(0.02)
 
         # 创建回调队列，注册回调队列响应函数以及消费队列
-        self._consumer_tag = self.declare_queue(reply_queue, exclusive=True, auto_delete=True, durable=False)
+        self._consumer_tag = self.declare_queue(reply_queue, exclusive=False, auto_delete=True, durable=False)
 
-        self.response = None
+        self.reply_response = None
         self.correlation_id = str(uuid.uuid4())
         properties = pika.BasicProperties(app_id=None,
                                           reply_to=reply_queue,
@@ -791,12 +795,12 @@ class RpcPublisher(Publisher):
                                     properties)
         self._message_number += 1
         self._deliveries.append(self._message_number)
-        LOG.info('send message # %i' % self._message_number)
+        LOG.info('publiser send message # %i' % self._message_number)
 
         # 等待消息响应结果
-        while self.response is None:
+        while self.reply_response is None:
             time.sleep(0.02)
-        result = self.response
+        result = self.reply_response
 
         # self._channel.basic_cancel(consumer_tag=self._consumer_tag, nowait=True)
         self.lock.release()  # 释放锁唤醒其他等待线程访问
@@ -825,8 +829,8 @@ class RpcPublisher(Publisher):
         else:
             # self.declare_queue(reply_queue)     # 创建回调队列
             self._channel.queue_declare(None, reply_queue, nowait=True, durable=True)
-            binding_key = '#.%s.#' % self.reply_queue
-            self._channel.queue_bind(None, self.reply_queue, self.exchange, binding_key, nowait=True)
+            binding_key = '#.%s.#' % reply_queue
+            self._channel.queue_bind(None, reply_queue, self.exchange, binding_key, nowait=True)
 
         self.response = None
         self.correlation_id = str(uuid.uuid4())
@@ -842,4 +846,4 @@ class RpcPublisher(Publisher):
                                     properties)
         self._message_number += 1
         self._deliveries.append(self._message_number)
-        LOG.info('send request # %i' % self._message_number)
+        LOG.info('publiser send request # %i' % self._message_number)
