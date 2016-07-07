@@ -340,7 +340,8 @@ class Consumer(threading.Thread):
         message_properties = pika.BasicProperties(correlation_id=props.correlation_id)
         callback_queue = props.reply_to
 
-        channel.queue_declare(None, queue=callback_queue, exclusive=True, auto_delete=True)
+        channel.queue_declare(None, queue=callback_queue, exclusive=False, auto_delete=True)
+        LOGGER.info('declaring queue %s' % callback_queue)
 
         # 返回处理结果
         channel.basic_publish(exchange='',

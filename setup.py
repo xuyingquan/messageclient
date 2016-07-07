@@ -12,7 +12,7 @@ from distutils.core import setup
 
 
 SOFTWARE_NAME = "shata-messageclient"
-VERSION = '1.4.9'
+VERSION = '1.5.0'
 URL = "http://www.shatacloud.com/"
 
 
